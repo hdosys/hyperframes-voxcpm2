@@ -27,10 +27,6 @@ jobs:
           npm test
           ./scripts/test-source.ps1
 
-      - name: Install pinned Vulkan SDK
-        shell: pwsh
-        run: ./scripts/install-vulkan-sdk.ps1
-
       - name: Build and verify release
         shell: pwsh
         run: |

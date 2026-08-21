@@ -30,10 +30,12 @@ try {
     foreach ($required in @(
             'manifest.json', 'engine/audio/scripts/audio.mjs', 'engine/audio/scripts/lib/tts.mjs',
             'engine/audio/scripts/lib/voxcpm2.mjs', 'runtime/cpu/llama-tts-server.exe',
-            'runtime/vulkan/llama-tts-server.exe', 'licenses/HyperFrames-APACHE-2.0.txt',
-            'licenses/llama.cpp-omni-MIT.txt'
+            'licenses/HyperFrames-APACHE-2.0.txt', 'licenses/llama.cpp-omni-MIT.txt'
         )) {
         if ($required -notin $names) { throw "Release archive entry is missing: $required" }
+    }
+    if (@($names | Where-Object { $_ -match '(?i)(^|/)vulkan(/|$)' }).Count -ne 0) {
+        throw 'Release archive contains a forbidden Vulkan payload.'
     }
 } finally {
     $zip.Dispose()
@@ -63,15 +65,11 @@ try {
         Invoke-CoreNative -Role "release syntax check $([IO.Path]::GetFileName($file))" -FilePath 'node.exe' `
             -ProcessArguments @('--check', $file) -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
     }
-    foreach ($server in @(
-            (Join-Path $stage 'runtime\cpu\llama-tts-server.exe'),
-            (Join-Path $stage 'runtime\vulkan\llama-tts-server.exe')
-        )) {
-        $identity = (Invoke-CoreNative -Role "release server identity $([IO.Path]::GetFileName((Split-Path -Parent $server)))" `
-                -FilePath $server -ProcessArguments @('--version') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
-        if ($identity -notmatch [regex]::Escape(([string]$manifest.runtime.commit).Substring(0, 7))) {
-            throw "Release server does not report the pinned runtime commit: $server"
-        }
+    $server = Join-Path $stage 'runtime\cpu\llama-tts-server.exe'
+    $identity = (Invoke-CoreNative -Role 'release CPU server identity' -FilePath $server `
+            -ProcessArguments @('--version') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
+    if ($identity -notmatch [regex]::Escape(([string]$manifest.runtime.commit).Substring(0, 7))) {
+        throw "Release CPU server does not report the pinned runtime commit: $server"
     }
 } finally {
     Remove-CoreTemporaryDirectory -Path $stage

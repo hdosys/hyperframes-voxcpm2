@@ -31,14 +31,14 @@ const numberFromEnv = (name, fallback) => {
 function requiredLauncherInputs(env = process.env, pathExists = existsSync) {
   const baseLm = env.HF_VOXCPM2_BASE_LM;
   const acoustic = env.HF_VOXCPM2_ACOUSTIC;
-  const vulkanServer = env.HF_VOXCPM2_SERVER_VULKAN;
   const cpuServer = env.HF_VOXCPM2_SERVER_CPU;
   return Boolean(
     baseLm &&
       acoustic &&
       pathExists(baseLm) &&
       pathExists(acoustic) &&
-      ((vulkanServer && pathExists(vulkanServer)) || (cpuServer && pathExists(cpuServer))),
+      cpuServer &&
+      pathExists(cpuServer),
   );
 }
 
@@ -104,8 +104,8 @@ async function stopChild(child) {
   if (child.exitCode === null) child.kill("SIGKILL");
 }
 
-async function startCandidate({ backend, executable, endpoint, baseLm, acoustic, stateDir }) {
-  const logBase = join(stateDir, `server-${backend}`);
+async function startServer({ executable, endpoint, baseLm, acoustic, stateDir }) {
+  const logBase = join(stateDir, "server-cpu");
   const stdoutFd = openSync(`${logBase}.stdout.log`, "a");
   const stderrFd = openSync(`${logBase}.stderr.log`, "a");
   const threads = Math.max(1, numberFromEnv("HF_VOXCPM2_THREADS", Math.min(8, cpus().length)));
@@ -115,7 +115,7 @@ async function startCandidate({ backend, executable, endpoint, baseLm, acoustic,
     "--voxcpm2-acoustic",
     acoustic,
     "--voxcpm2-n-gpu-layers",
-    backend === "vulkan" ? "-1" : "0",
+    "0",
     "--host",
     endpoint.hostname === "[::1]" ? "::1" : endpoint.hostname,
     "--port",
@@ -146,7 +146,7 @@ async function startCandidate({ backend, executable, endpoint, baseLm, acoustic,
   while (Date.now() < deadline) {
     if (spawnError) throw spawnError;
     if (child.exitCode !== null) {
-      throw new Error(`${backend} server exited with status ${child.exitCode}; log: ${logBase}.stderr.log`);
+      throw new Error(`CPU server exited with status ${child.exitCode}; log: ${logBase}.stderr.log`);
     }
     const probe = await probeServer(endpoint);
     if (probe.ready) return child;
@@ -157,19 +157,19 @@ async function startCandidate({ backend, executable, endpoint, baseLm, acoustic,
     await delay(500);
   }
   await stopChild(child);
-  throw new Error(`${backend} server startup exceeded ${timeoutMs}ms; log: ${logBase}.stderr.log`);
+  throw new Error(`CPU server startup exceeded ${timeoutMs}ms; log: ${logBase}.stderr.log`);
 }
 
 async function ensureServer() {
   const endpoint = localEndpoint();
   const existing = await probeServer(endpoint);
-  if (existing.ready) return { endpoint, backend: "external" };
+  if (existing.ready) return { endpoint };
   if (existing.reachable) {
     throw new Error(`HF_VOXCPM2_ENDPOINT is occupied by an incompatible service: ${existing.detail}`);
   }
   if (!requiredLauncherInputs()) {
     throw new Error(
-      "VoxCPM2 server is offline and launcher paths are incomplete (HF_VOXCPM2_BASE_LM, HF_VOXCPM2_ACOUSTIC, and a server executable are required)",
+      "VoxCPM2 server is offline and launcher paths are incomplete (HF_VOXCPM2_BASE_LM, HF_VOXCPM2_ACOUSTIC, and HF_VOXCPM2_SERVER_CPU are required)",
     );
   }
 
@@ -177,34 +177,16 @@ async function ensureServer() {
   const acoustic = resolve(process.env.HF_VOXCPM2_ACOUSTIC);
   const stateDir = resolve(process.env.HF_VOXCPM2_STATE_DIR || join(tmpdir(), "hyperframes-voxcpm2"));
   mkdirSync(stateDir, { recursive: true });
-  const requested = String(process.env.HF_VOXCPM2_BACKEND || "auto").toLowerCase();
-  if (!["auto", "vulkan", "cpu"].includes(requested)) {
-    throw new Error("HF_VOXCPM2_BACKEND must be auto, vulkan, or cpu");
-  }
-  const candidates = [];
-  const vulkanServer = process.env.HF_VOXCPM2_SERVER_VULKAN;
   const cpuServer = process.env.HF_VOXCPM2_SERVER_CPU;
-  if ((requested === "auto" || requested === "vulkan") && vulkanServer && existsSync(vulkanServer)) {
-    candidates.push({ backend: "vulkan", executable: resolve(vulkanServer) });
-  }
-  if ((requested === "auto" || requested === "cpu") && cpuServer && existsSync(cpuServer)) {
-    candidates.push({ backend: "cpu", executable: resolve(cpuServer) });
-  }
-  if (!candidates.length) throw new Error(`no ${requested} VoxCPM2 server executable is available`);
-
-  const failures = [];
-  for (const candidate of candidates) {
-    try {
-      console.error(`· voxcpm2: starting ${candidate.backend} server`);
-      launchedServer = await startCandidate({ ...candidate, endpoint, baseLm, acoustic, stateDir });
-      return { endpoint, backend: candidate.backend };
-    } catch (error) {
-      failures.push(`${candidate.backend}: ${error.message}`);
-      if (requested !== "auto") break;
-      console.error(`· voxcpm2: ${candidate.backend} unavailable; trying CPU`);
-    }
-  }
-  throw new Error(`VoxCPM2 server failed to start (${failures.join("; ")})`);
+  console.error("· voxcpm2: starting CPU server");
+  launchedServer = await startServer({
+    executable: resolve(cpuServer),
+    endpoint,
+    baseLm,
+    acoustic,
+    stateDir,
+  });
+  return { endpoint };
 }
 
 async function activeServer() {
@@ -257,7 +239,6 @@ async function synthesizeVoxCPM2Impl({ text, voiceId, lang, speed, wavAbs, hyper
       schema: 1,
       runtime: RUNTIME_COMMIT,
       model_id: process.env.HF_VOXCPM2_MODEL_ID || `DennisHuang648/VoxCPM2-GGUF@${MODEL_REVISION}`,
-      backend: process.env.HF_VOXCPM2_BACKEND || "auto",
       reference: createHash("sha256").update(reference).digest("hex"),
       text,
       lang,

@@ -6,8 +6,7 @@ param(
     [string]$Version,
     [string]$OutputDirectory = '',
     [string]$RuntimeSource = '',
-    [string]$CpuServer = '',
-    [string]$VulkanServer = ''
+    [string]$CpuServer = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,10 +24,6 @@ $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 if (-not (Test-Path -LiteralPath $OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory | Out-Null
 }
-if (([string]::IsNullOrWhiteSpace($CpuServer)) -xor [string]::IsNullOrWhiteSpace($VulkanServer)) {
-    throw 'CpuServer and VulkanServer must be provided together.'
-}
-
 $stage = New-CoreTemporaryDirectory
 try {
     $hyperframesSource = Join-Path $stage 'h'
@@ -79,46 +74,16 @@ try {
             -ProcessArguments @('--build', $cpuBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', '8') `
             -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
         $CpuServer = Join-Path $cpuBuild 'bin\Release\llama-tts-server.exe'
-
-        $vulkanRoot = [string]$env:VULKAN_SDK
-        if ([string]::IsNullOrWhiteSpace($vulkanRoot)) {
-            $vulkanRoot = "C:\VulkanSDK\$($versions.vulkanSdk.version)"
-        }
-        $vulkanRoot = [IO.Path]::GetFullPath($vulkanRoot).TrimEnd('\')
-        if ($vulkanRoot -cne "C:\VulkanSDK\$($versions.vulkanSdk.version)") {
-            throw "Unexpected Vulkan SDK root: $vulkanRoot"
-        }
-        $env:VULKAN_SDK = $vulkanRoot
-        $env:Path = (Join-Path $vulkanRoot 'Bin') + ';' + $env:Path
-        $spirvDirectory = Join-Path $vulkanRoot 'Lib\cmake'
-        if (-not (Test-Path -LiteralPath (Join-Path $spirvDirectory 'SPIRV-HeadersConfig.cmake') -PathType Leaf)) {
-            throw "Vulkan SDK SPIRV-HeadersConfig.cmake is missing: $spirvDirectory"
-        }
-        $vulkanBuild = Join-Path $stage 'v'
-        Invoke-CoreNative -Role 'Vulkan runtime configuration' -FilePath $cmake `
-            -ProcessArguments (@('-S', $RuntimeSource, '-B', $vulkanBuild) + $common +
-                @('-DGGML_VULKAN=ON', "-DSPIRV-Headers_DIR=$spirvDirectory")) `
-            -WorkingDirectory $stage -TimeoutSeconds 300 | Out-Null
-        Invoke-CoreNative -Role 'Vulkan runtime build' -FilePath $cmake `
-            -ProcessArguments @('--build', $vulkanBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', '8') `
-            -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
-        $VulkanServer = Join-Path $vulkanBuild 'bin\Release\llama-tts-server.exe'
     }
 
     $CpuServer = [IO.Path]::GetFullPath($CpuServer)
-    $VulkanServer = [IO.Path]::GetFullPath($VulkanServer)
-    foreach ($entry in @(
-            @{ Role = 'CPU server identity'; Path = $CpuServer },
-            @{ Role = 'Vulkan server identity'; Path = $VulkanServer }
-        )) {
-        if (-not (Test-Path -LiteralPath $entry.Path -PathType Leaf)) {
-            throw "$($entry.Role) input is missing: $($entry.Path)"
-        }
-        $identity = (Invoke-CoreNative -Role $entry.Role -FilePath $entry.Path `
-                -ProcessArguments @('--version') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
-        if ($identity -notmatch [regex]::Escape(([string]$versions.runtime.commit).Substring(0, 7))) {
-            throw "$($entry.Role) did not report the pinned runtime commit."
-        }
+    if (-not (Test-Path -LiteralPath $CpuServer -PathType Leaf)) {
+        throw "CPU server input is missing: $CpuServer"
+    }
+    $identity = (Invoke-CoreNative -Role 'CPU server identity' -FilePath $CpuServer `
+            -ProcessArguments @('--version') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
+    if ($identity -notmatch [regex]::Escape(([string]$versions.runtime.commit).Substring(0, 7))) {
+        throw 'CPU server did not report the pinned runtime commit.'
     }
 
     $patch = Join-Path $repositoryRoot 'patches\hyperframes-0.8.6.patch'
@@ -135,12 +100,11 @@ try {
     $engine = Join-Path $bundle 'engine'
     $runtime = Join-Path $bundle 'runtime'
     $licenses = Join-Path $bundle 'licenses'
-    foreach ($directory in @($bundle, $engine, (Join-Path $runtime 'cpu'), (Join-Path $runtime 'vulkan'), $licenses)) {
+    foreach ($directory in @($bundle, $engine, (Join-Path $runtime 'cpu'), $licenses)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
     Copy-Item -LiteralPath $CpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
-    Copy-Item -LiteralPath $VulkanServer -Destination (Join-Path $runtime 'vulkan\llama-tts-server.exe')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
     Copy-Item -LiteralPath (Join-Path $RuntimeSource 'LICENSE') -Destination (Join-Path $licenses 'llama.cpp-omni-MIT.txt')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'LICENSE') -Destination (Join-Path $licenses 'hyperframes-voxcpm2-APACHE-2.0.txt')

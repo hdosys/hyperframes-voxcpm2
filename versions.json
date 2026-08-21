@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "0.1.3",
+  "releaseVersion": "0.1.4",
   "hyperframes": {
     "version": "0.8.6",
     "tag": "v0.8.6",
@@ -37,10 +37,5 @@
     "size": 1228844,
     "sha256": "4a3954efc564d156125e45f3479f2d0b61db0dcdb25a63cfaad9cc968eac048f",
     "url": "https://raw.githubusercontent.com/OpenBMB/VoxCPM/ee8161e9e1b7b082cb5721a3a9980da4204401e6/examples/reference_speaker.wav"
-  },
-  "vulkanSdk": {
-    "version": "1.4.309.0",
-    "url": "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0-Installer.exe",
-    "sha256": "48b132169b64fe65cdb0f20970195335a65354e73f1ea5373032c2a8bbad4297"
   }
 }
