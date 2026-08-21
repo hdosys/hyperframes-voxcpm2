@@ -23,7 +23,7 @@ licenses/                     Upstream licenses
 manifest.json                 Source, model, and payload identities
 ```
 
-The project publishes GitHub Release archives. It deliberately has no installer and no WinGet package. Products such as Herdr Sandbox consume a pinned archive and provide their own configuration and deployment experience.
+The project publishes GitHub Release archives. It deliberately has no installer and no WinGet package. Consuming products verify an archive and provide their own configuration and deployment experience.
 
 ## Development
 
@@ -46,8 +46,8 @@ pwsh -NoProfile -File scripts/test-source.ps1
 Build a release archive:
 
 ```powershell
-pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.0
-pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.0-windows-x64.zip
+pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.1
+pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.1-windows-x64.zip
 ```
 
 All upstream revisions and model metadata are pinned in [`versions.json`](versions.json).
