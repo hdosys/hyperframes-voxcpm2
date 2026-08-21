@@ -46,8 +46,8 @@ pwsh -NoProfile -File scripts/test-source.ps1
 Build a release archive:
 
 ```powershell
-pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.1
-pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.1-windows-x64.zip
+pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.2
+pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.2-windows-x64.zip
 ```
 
 All upstream revisions and model metadata are pinned in [`versions.json`](versions.json).

@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath $glslc -PathType Leaf)) {
         }
         Invoke-CoreNative -Role 'Vulkan SDK installation' -FilePath $installer `
             -ProcessArguments @('--accept-licenses', '--default-answer', '--confirm-command', 'install') `
-            -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
+            -WorkingDirectory (Split-Path -Parent $stage) -TimeoutSeconds 1200 | Out-Null
     } finally {
         Remove-CoreTemporaryDirectory -Path $stage
     }
