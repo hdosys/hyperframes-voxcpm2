@@ -1,0 +1,84 @@
+diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio/scripts/lib/tts.mjs
+--- a/skills/media-use/audio/scripts/lib/tts.mjs
++++ b/skills/media-use/audio/scripts/lib/tts.mjs
+@@ -19,6 +19,14 @@ import { tmpdir } from "node:os";
+ import { dirname, join } from "node:path";
+ import { heygenAuthHeaders, heygenCredential, heygenJSON } from "./heygen.mjs";
+ import { pythonInvocation } from "./python.mjs";
++import {
++  resolveVoxCPM2Reference,
++  shutdownVoxCPM2Server,
++  synthesizeVoxCPM2,
++  voxcpm2Available,
++} from "./voxcpm2.mjs";
++
++export { shutdownVoxCPM2Server };
+ 
+ // ── provider detection ────────────────────────────────────────────────────────
+ export function heygenAvailable() {
+@@ -36,8 +44,12 @@ export function elevenlabsAvailable() {
+ // First available provider wins; an explicit choice is honored (and validated).
+ export function pickProvider(userProvider) {
+   if (userProvider) {
+-    if (!["heygen", "elevenlabs", "kokoro"].includes(userProvider))
+-      throw new Error(`invalid provider "${userProvider}" (heygen | elevenlabs | kokoro)`);
++    if (!["voxcpm2", "heygen", "elevenlabs", "kokoro"].includes(userProvider))
++      throw new Error(`invalid provider "${userProvider}" (voxcpm2 | heygen | elevenlabs | kokoro)`);
++    if (userProvider === "voxcpm2" && !voxcpm2Available())
++      throw new Error(
++        "provider=voxcpm2 but its reference WAV, models, or local server executable is not configured",
++      );
+     if (userProvider === "heygen" && !heygenAvailable())
+       throw new Error(
+         "provider=heygen but no HeyGen credentials (set $HEYGEN_API_KEY or run `npx hyperframes auth login`)",
+@@ -46,7 +58,13 @@ export function pickProvider(userProvider) {
+       throw new Error("provider=elevenlabs but $ELEVENLABS_API_KEY is not set");
+     return userProvider;
+   }
+-  return heygenAvailable() ? "heygen" : elevenlabsAvailable() ? "elevenlabs" : "kokoro";
++  return voxcpm2Available()
++    ? "voxcpm2"
++    : heygenAvailable()
++      ? "heygen"
++      : elevenlabsAvailable()
++        ? "elevenlabs"
++        : "kokoro";
+ }
+ 
+ // ── voice resolution ──────────────────────────────────────────────────────────
+@@ -54,6 +73,7 @@ export function pickProvider(userProvider) {
+ // English public starfish voice when none is pinned. ElevenLabs/Kokoro have
+ // their own defaults.
+ export async function resolveVoiceId({ provider, userVoice, lang = "en" }) {
++  if (provider === "voxcpm2") return resolveVoxCPM2Reference(userVoice);
+   if (userVoice) return userVoice;
+   if (provider === "elevenlabs") return "21m00Tcm4TlvDq8ikWAM"; // Rachel
+   if (provider === "kokoro") {
+@@ -250,5 +269,8 @@ export async function synthesizeOne({
+   wavAbs,
+   hyperframesDir,
+ }) {
++  if (provider === "voxcpm2") {
++    return synthesizeVoxCPM2({ text, voiceId, lang, speed, wavAbs, hyperframesDir });
++  }
+   if (provider === "heygen") return synthesizeHeygen({ text, voiceId, lang, speed, wavAbs });
+   if (provider === "elevenlabs") {
+diff --git a/skills/media-use/audio/scripts/audio.mjs b/skills/media-use/audio/scripts/audio.mjs
+--- a/skills/media-use/audio/scripts/audio.mjs
++++ b/skills/media-use/audio/scripts/audio.mjs
+@@ -47,6 +47,7 @@ import {
+   ffprobeDuration,
+   pickProvider,
+   resolveVoiceId,
++  shutdownVoxCPM2Server,
+   synthesizeOne,
+   transcribeWav,
+   withWordIds,
+@@ -171,6 +172,7 @@ if (only.has("tts") && lines.length) {
+   voices = results.filter(Boolean);
+   for (const v of voices)
+     console.error(`  voice ${v.id}: ${v.path} (${v.duration_s}s, ${v.words.length} words)`);
++  if (ttsProvider === "voxcpm2") await shutdownVoxCPM2Server();
+ }
+ const hasVoice = voices.length > 0;
+ const totalDuration = r3(voices.reduce((a, v) => a + (v.duration_s || 0), 0));

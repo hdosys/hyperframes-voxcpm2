@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "0.1.0",
+  "hyperframes": {
+    "version": "0.8.6",
+    "tag": "v0.8.6",
+    "commit": "36c7dffe5ca4c7dbf84e876d34ac176ed8770c6d",
+    "repository": "https://github.com/heygen-com/hyperframes.git"
+  },
+  "runtime": {
+    "ref": "b262",
+    "commit": "09f5c3f1b484759f17b06fc63574f749c89c8761",
+    "repository": "https://github.com/tc-mb/llama.cpp-omni.git"
+  },
+  "models": {
+    "repository": "DennisHuang648/VoxCPM2-GGUF",
+    "revision": "169f64d8b98bbaab1761e4ca3a83e6af653456cc",
+    "files": [
+      {
+        "name": "VoxCPM2-BaseLM-F16.gguf",
+        "size": 3247980544,
+        "sha256": "8be62e899f8f32b3c2109c99950b46671135a8f40b27b1df720f6823d36cc59e",
+        "url": "https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/resolve/169f64d8b98bbaab1761e4ca3a83e6af653456cc/VoxCPM2-BaseLM-F16.gguf?download=true"
+      },
+      {
+        "name": "VoxCPM2-Acoustic-F16.gguf",
+        "size": 1825096352,
+        "sha256": "5bde898488ad635ff55d24da53543768fa33d5e5cdc538ce190e5ef831038e85",
+        "url": "https://huggingface.co/DennisHuang648/VoxCPM2-GGUF/resolve/169f64d8b98bbaab1761e4ca3a83e6af653456cc/VoxCPM2-Acoustic-F16.gguf?download=true"
+      }
+    ]
+  },
+  "referenceAudio": {
+    "repository": "OpenBMB/VoxCPM",
+    "commit": "ee8161e9e1b7b082cb5721a3a9980da4204401e6",
+    "name": "reference_speaker.wav",
+    "size": 1228844,
+    "sha256": "4a3954efc564d156125e45f3479f2d0b61db0dcdb25a63cfaad9cc968eac048f",
+    "url": "https://raw.githubusercontent.com/OpenBMB/VoxCPM/ee8161e9e1b7b082cb5721a3a9980da4204401e6/examples/reference_speaker.wav"
+  },
+  "vulkanSdk": {
+    "version": "1.4.309.0",
+    "url": "https://sdk.lunarg.com/sdk/download/1.4.309.0/windows/VulkanSDK-1.4.309.0-Installer.exe",
+    "sha256": "48b132169b64fe65cdb0f20970195335a65354e73f1ea5373032c2a8bbad4297"
+  }
+}

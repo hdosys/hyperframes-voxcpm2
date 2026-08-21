@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Test provider
+        shell: pwsh
+        run: |
+          npm test
+          ./scripts/test-source.ps1
+
+      - name: Install pinned Vulkan SDK
+        shell: pwsh
+        run: ./scripts/install-vulkan-sdk.ps1
+
+      - name: Build and verify release
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          ./scripts/build-release.ps1 -Version $version
+          ./scripts/test-release.ps1 -Archive "dist/hyperframes-voxcpm2-v$version-windows-x64.zip"
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart('v')
+          $archive = "dist/hyperframes-voxcpm2-$tag-windows-x64.zip"
+          $sidecar = "$archive.sha256"
+          $notes = "https://github.com/hdosys/hyperframes-voxcpm2/blob/$tag/CHANGELOG.md#$($version.Replace('.', ''))---2026-08-21"
+          gh release create $tag $archive $sidecar --verify-tag --title $tag --notes $notes
