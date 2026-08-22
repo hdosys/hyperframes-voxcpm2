@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9 - 2026-08-22
+
+- Added the selected German Herdr narrator reference as the stable default voice across segments.
+- Explicit Voice Design and `--voice` selections continue to override the default narrator.
+
 ## 0.1.8 - 2026-08-22
 
 - Renamed the direct synthesis command to `tts.ps1` and removed the previous command name.

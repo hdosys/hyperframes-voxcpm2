@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import {
   resolveVoxCPM2Reference,
@@ -115,8 +115,12 @@ test("availability requires a complete launcher or endpoint without a reference 
   );
 });
 
-test("reference resolution defaults to Voice Design and validates an explicit WAV", () => {
+test("reference resolution accepts one configured default and validates an explicit WAV", () => {
   assert.equal(resolveVoxCPM2Reference(null, () => false), null);
+  assert.equal(
+    resolveVoxCPM2Reference(null, (path) => path === "default.wav", "default.wav"),
+    resolve("default.wav"),
+  );
   assert.match(resolveVoxCPM2VoiceDesign(null), /natural conversational pace/);
   assert.equal(resolveVoxCPM2VoiceDesign("  A brighter narrator.  "), "A brighter narrator.");
   assert.throws(() => resolveVoxCPM2VoiceDesign("  "), /nonempty string/);
@@ -126,13 +130,15 @@ test("reference resolution defaults to Voice Design and validates an explicit WA
   );
 });
 
-test("default synthesis requests a calm male Voice Design without reference audio", async () => {
+test("default synthesis clones the configured narrator reference", async () => {
   const restore = preserveEnvironment();
   const root = mkdtempSync(join(tmpdir(), "voxcpm2-design-test-"));
   const server = await startFakeServer();
   try {
     process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
-    process.env.HF_VOXCPM2_REFERENCE_AUDIO = join(root, "unused-reference.wav");
+    const reference = join(root, "herdr-narrator-de.wav");
+    writeFileSync(reference, wavBytes("selected narrator"));
+    process.env.HF_VOXCPM2_REFERENCE_AUDIO = reference;
     process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
     process.env.HF_VOXCPM2_MODEL_ID = "design-fixture-model";
 
@@ -148,11 +154,9 @@ test("default synthesis requests a calm male Voice Design without reference audi
     assert.deepEqual(result, { ok: true, words: [] });
     assert.equal(server.posts(), 1);
     const [request] = server.requests();
-    assert.equal(request.voice, "default");
-    assert.equal("reference_audio" in request, false);
-    assert.match(request.input, /^\(A deep, calm adult male narrator/);
-    assert.match(request.input, /natural conversational pace with brief pauses/);
-    assert.match(request.input, /Explain the isolated workspace\.$/);
+    assert.equal(request.voice, "reference");
+    assert.equal(typeof request.reference_audio, "string");
+    assert.equal(request.input, "Explain the isolated workspace.");
   } finally {
     await shutdownVoxCPM2Server();
     await server.close();
@@ -169,6 +173,9 @@ test("an explicit Voice Design overrides the default and owns its cache identity
     process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
     process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
     process.env.HF_VOXCPM2_MODEL_ID = "design-override-fixture-model";
+    const reference = join(root, "herdr-narrator-de.wav");
+    writeFileSync(reference, wavBytes("selected narrator"));
+    process.env.HF_VOXCPM2_REFERENCE_AUDIO = reference;
     const common = {
       text: "Compare this sentence.",
       voiceId: null,
@@ -188,7 +195,9 @@ test("an explicit Voice Design overrides the default and owns its cache identity
     assert.equal(fallback.ok, true);
     assert.equal(server.posts(), 2);
     assert.match(server.requests()[0].input, /^\(A concise, energetic technical narrator\.\)/);
-    assert.match(server.requests()[1].input, /^\(A deep, calm adult male narrator/);
+    assert.equal("reference_audio" in server.requests()[0], false);
+    assert.equal(server.requests()[1].input, "Compare this sentence.");
+    assert.equal(typeof server.requests()[1].reference_audio, "string");
   } finally {
     await shutdownVoxCPM2Server();
     await server.close();

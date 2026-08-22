@@ -31,6 +31,7 @@ try {
             'manifest.json', 'bin/tts.ps1', 'engine/audio/scripts/audio.mjs',
             'engine/audio/scripts/lib/tts.mjs', 'engine/audio/scripts/lib/voxcpm2.mjs',
             'engine/audio/scripts/lib/voxcpm2-cli.mjs', 'runtime/cpu/llama-tts-server.exe',
+            'reference/herdr-narrator-de.wav',
             'licenses/HyperFrames-APACHE-2.0.txt', 'licenses/llama.cpp-omni-MIT.txt'
         )) {
         if ($required -notin $names) { throw "Release archive entry is missing: $required" }

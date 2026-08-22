@@ -50,12 +50,13 @@ export function voxcpm2Available(env = process.env, pathExists = existsSync) {
   return Boolean(env.HF_VOXCPM2_ENDPOINT || requiredLauncherInputs(env, pathExists));
 }
 
-export function resolveVoxCPM2Reference(userVoice, pathExists = existsSync) {
-  if (!userVoice) return null;
-  if (!pathExists(userVoice)) {
+export function resolveVoxCPM2Reference(userVoice, pathExists = existsSync, defaultVoice = null) {
+  const selectedVoice = userVoice || defaultVoice;
+  if (!selectedVoice) return null;
+  if (!pathExists(selectedVoice)) {
     throw new Error("VoxCPM2 --voice must select an existing reference WAV");
   }
-  return resolve(userVoice);
+  return resolve(selectedVoice);
 }
 
 export function resolveVoxCPM2VoiceDesign(userDesign) {
@@ -239,7 +240,10 @@ async function synthesizeVoxCPM2Impl({
     if (Number(speed) !== 1) {
       return { ok: false, words: [], error: "VoxCPM2 currently supports speed=1 only" };
     }
-    const referencePath = resolveVoxCPM2Reference(voiceId);
+    const defaultReference = voiceId || (voiceDesign !== undefined && voiceDesign !== null)
+      ? null
+      : process.env.HF_VOXCPM2_REFERENCE_AUDIO;
+    const referencePath = resolveVoxCPM2Reference(voiceId, existsSync, defaultReference);
     if (referencePath && voiceDesign !== undefined && voiceDesign !== null) {
       return { ok: false, words: [], error: "VoxCPM2 --voice and Voice Design are mutually exclusive" };
     }
