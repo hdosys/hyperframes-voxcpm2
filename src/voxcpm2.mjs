@@ -18,8 +18,9 @@ const RUNTIME_COMMIT = "09f5c3f1b484759f17b06fc63574f749c89c8761";
 const MODEL_REVISION = "169f64d8b98bbaab1761e4ca3a83e6af653456cc";
 const DEFAULT_ENDPOINT = "http://127.0.0.1:18765";
 const DEFAULT_VOICE_DESIGN =
-  "A deep, calm adult male narrator with a warm, grounded tone, speaking slowly and clearly " +
-  "with natural pauses. Professional software tutorial delivery, restrained and reassuring.";
+  "A deep, calm adult male narrator with a warm, grounded tone, speaking at a natural " +
+  "conversational pace with brief pauses. Clear, confident software tutorial delivery, " +
+  "focused and reassuring.";
 
 let serverPromise = null;
 let launchedServer = null;
@@ -55,6 +56,14 @@ export function resolveVoxCPM2Reference(userVoice, pathExists = existsSync) {
     throw new Error("VoxCPM2 --voice must select an existing reference WAV");
   }
   return resolve(userVoice);
+}
+
+export function resolveVoxCPM2VoiceDesign(userDesign) {
+  if (userDesign === undefined || userDesign === null) return DEFAULT_VOICE_DESIGN;
+  if (typeof userDesign !== "string" || !userDesign.trim()) {
+    throw new Error("VoxCPM2 Voice Design must be a nonempty string");
+  }
+  return userDesign.trim();
 }
 
 function localEndpoint() {
@@ -217,12 +226,24 @@ function validWav(bytes) {
   );
 }
 
-async function synthesizeVoxCPM2Impl({ text, voiceId, lang, speed, wavAbs, hyperframesDir }) {
+async function synthesizeVoxCPM2Impl({
+  text,
+  voiceId,
+  voiceDesign,
+  lang,
+  speed,
+  wavAbs,
+  hyperframesDir,
+}) {
   try {
     if (Number(speed) !== 1) {
       return { ok: false, words: [], error: "VoxCPM2 currently supports speed=1 only" };
     }
     const referencePath = resolveVoxCPM2Reference(voiceId);
+    if (referencePath && voiceDesign !== undefined && voiceDesign !== null) {
+      return { ok: false, words: [], error: "VoxCPM2 --voice and Voice Design are mutually exclusive" };
+    }
+    const design = referencePath ? null : resolveVoxCPM2VoiceDesign(voiceDesign);
     const reference = referencePath ? readFileSync(referencePath) : null;
     if (reference && !validWav(reference)) {
       return { ok: false, words: [], error: `VoxCPM2 reference is not a WAV: ${referencePath}` };
@@ -240,7 +261,7 @@ async function synthesizeVoxCPM2Impl({ text, voiceId, lang, speed, wavAbs, hyper
       model_id: process.env.HF_VOXCPM2_MODEL_ID || `DennisHuang648/VoxCPM2-GGUF@${MODEL_REVISION}`,
       voice: reference
         ? { mode: "reference", sha256: createHash("sha256").update(reference).digest("hex") }
-        : { mode: "design", description: DEFAULT_VOICE_DESIGN },
+        : { mode: "design", description: design },
       text,
       lang,
       speed,
@@ -264,7 +285,7 @@ async function synthesizeVoxCPM2Impl({ text, voiceId, lang, speed, wavAbs, hyper
     const { endpoint } = await activeServer();
     const body = {
       model: "voxcpm2",
-      input: reference ? text : `(${DEFAULT_VOICE_DESIGN})${text}`,
+      input: reference ? text : `(${design})${text}`,
       voice: reference ? "reference" : "default",
       response_format: "wav",
       ...params,

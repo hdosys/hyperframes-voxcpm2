@@ -54,12 +54,18 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
    if (userVoice) return userVoice;
    if (provider === "elevenlabs") return "21m00Tcm4TlvDq8ikWAM"; // Rachel
    if (provider === "kokoro") {
-@@ -250,5 +269,8 @@ export async function synthesizeOne({
+@@ -245,10 +264,14 @@ export async function synthesizeOne({
+   provider,
+   text,
+   voiceId,
++  voiceDesign,
+   lang = "en",
+   speed = 1.0,
    wavAbs,
    hyperframesDir,
  }) {
 +  if (provider === "voxcpm2") {
-+    return synthesizeVoxCPM2({ text, voiceId, lang, speed, wavAbs, hyperframesDir });
++    return synthesizeVoxCPM2({ text, voiceId, voiceDesign, lang, speed, wavAbs, hyperframesDir });
 +  }
    if (provider === "heygen") return synthesizeHeygen({ text, voiceId, lang, speed, wavAbs });
    if (provider === "elevenlabs") {
@@ -74,7 +80,30 @@ diff --git a/skills/media-use/audio/scripts/audio.mjs b/skills/media-use/audio/s
    synthesizeOne,
    transcribeWav,
    withWordIds,
-@@ -171,6 +172,7 @@ if (only.has("tts") && lines.length) {
+@@ -93,6 +94,7 @@ const providerOverride = flag("provider", null);
+ const bgmModeOverride = flag("bgm-mode", null);
+ const noBgm = has("no-bgm");
+ const voiceOverride = flag("voice", null);
++const voiceDesignOverride = flag("voice-design", null);
+ const speedOverride = flag("speed", null);
+ const langOverride = flag("lang", null);
+ const seedSeconds = Number(flag("seed-seconds", "28")) || 28;
+@@ -109,5 +111,6 @@ const lines = Array.isArray(request.lines) ? request.lines : [];
+ const lang = langOverride || request.lang || "en";
+ const speed = Number(speedOverride ?? request.speed ?? 1.0) || 1.0;
++const voiceDesign = voiceDesignOverride ?? request.voice_design ?? null;
+ 
+ // ── env + HeyGen availability (the single switch) ─────────────────────────────
+ loadEnvFromDir(hyperframesDir);
+@@ -148,6 +151,7 @@ if (only.has("tts") && lines.length) {
+       provider: ttsProvider,
+       text,
+       voiceId,
++      voiceDesign,
+       lang,
+       speed,
+       wavAbs: abs,
+@@ -171,6 +175,7 @@ if (only.has("tts") && lines.length) {
    voices = results.filter(Boolean);
    for (const v of voices)
      console.error(`  voice ${v.id}: ${v.path} (${v.duration_s}s, ${v.words.length} words)`);

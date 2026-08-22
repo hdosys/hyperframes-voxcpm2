@@ -7,6 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   resolveVoxCPM2Reference,
+  resolveVoxCPM2VoiceDesign,
   shutdownVoxCPM2Server,
   synthesizeVoxCPM2,
   voxcpm2Available,
@@ -116,6 +117,9 @@ test("availability requires a complete launcher or endpoint without a reference 
 
 test("reference resolution defaults to Voice Design and validates an explicit WAV", () => {
   assert.equal(resolveVoxCPM2Reference(null, () => false), null);
+  assert.match(resolveVoxCPM2VoiceDesign(null), /natural conversational pace/);
+  assert.equal(resolveVoxCPM2VoiceDesign("  A brighter narrator.  "), "A brighter narrator.");
+  assert.throws(() => resolveVoxCPM2VoiceDesign("  "), /nonempty string/);
   assert.throws(
     () => resolveVoxCPM2Reference("missing.wav", () => false),
     /must select an existing reference WAV/,
@@ -147,8 +151,44 @@ test("default synthesis requests a calm male Voice Design without reference audi
     assert.equal(request.voice, "default");
     assert.equal("reference_audio" in request, false);
     assert.match(request.input, /^\(A deep, calm adult male narrator/);
-    assert.match(request.input, /natural pauses/);
+    assert.match(request.input, /natural conversational pace with brief pauses/);
     assert.match(request.input, /Explain the isolated workspace\.$/);
+  } finally {
+    await shutdownVoxCPM2Server();
+    await server.close();
+    restore();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an explicit Voice Design overrides the default and owns its cache identity", async () => {
+  const restore = preserveEnvironment();
+  const root = mkdtempSync(join(tmpdir(), "voxcpm2-design-override-test-"));
+  const server = await startFakeServer();
+  try {
+    process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
+    process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
+    process.env.HF_VOXCPM2_MODEL_ID = "design-override-fixture-model";
+    const common = {
+      text: "Compare this sentence.",
+      voiceId: null,
+      lang: "en",
+      speed: 1,
+      hyperframesDir: root,
+    };
+
+    const custom = await synthesizeVoxCPM2({
+      ...common,
+      voiceDesign: "A concise, energetic technical narrator.",
+      wavAbs: join(root, "custom.wav"),
+    });
+    const fallback = await synthesizeVoxCPM2({ ...common, wavAbs: join(root, "default.wav") });
+
+    assert.equal(custom.ok, true);
+    assert.equal(fallback.ok, true);
+    assert.equal(server.posts(), 2);
+    assert.match(server.requests()[0].input, /^\(A concise, energetic technical narrator\.\)/);
+    assert.match(server.requests()[1].input, /^\(A deep, calm adult male narrator/);
   } finally {
     await shutdownVoxCPM2Server();
     await server.close();
@@ -186,6 +226,14 @@ test("synthesis returns words empty and reuses the deterministic WAV cache", asy
     assert.equal(typeof server.requests()[0].reference_audio, "string");
     assert.equal(server.requests()[0].input, request.text);
     assert.deepEqual(readFileSync(second), readFileSync(first));
+    const ambiguous = await synthesizeVoxCPM2({
+      ...request,
+      voiceDesign: "A conflicting design.",
+      wavAbs: join(root, "ambiguous.wav"),
+    });
+    assert.equal(ambiguous.ok, false);
+    assert.match(ambiguous.error, /mutually exclusive/);
+    assert.equal(server.posts(), 1);
   } finally {
     await shutdownVoxCPM2Server();
     await server.close();

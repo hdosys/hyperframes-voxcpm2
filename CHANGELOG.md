@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 - 2026-08-22
+
+- Updated the default calm male Voice Design to a natural conversational pace with brief pauses.
+- Added per-project Voice Design overrides and a direct `voxcpm2.ps1` CLI for rapid design or reference-clone synthesis.
+
 ## 0.1.6 - 2026-08-22
 
 - Updated the bundled audio engine integration to HyperFrames 0.8.8.

@@ -95,15 +95,19 @@ try {
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2.mjs') `
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2.mjs')
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2-cli.mjs') `
+        -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs')
 
     $bundle = Join-Path $stage 'bundle'
     $engine = Join-Path $bundle 'engine'
+    $bin = Join-Path $bundle 'bin'
     $runtime = Join-Path $bundle 'runtime'
     $licenses = Join-Path $bundle 'licenses'
-    foreach ($directory in @($bundle, $engine, (Join-Path $runtime 'cpu'), $licenses)) {
+    foreach ($directory in @($bundle, $engine, $bin, (Join-Path $runtime 'cpu'), $licenses)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2.ps1') -Destination $bin
     Copy-Item -LiteralPath $CpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
     Copy-Item -LiteralPath (Join-Path $RuntimeSource 'LICENSE') -Destination (Join-Path $licenses 'llama.cpp-omni-MIT.txt')

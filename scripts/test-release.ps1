@@ -28,8 +28,9 @@ try {
         }
     }
     foreach ($required in @(
-            'manifest.json', 'engine/audio/scripts/audio.mjs', 'engine/audio/scripts/lib/tts.mjs',
-            'engine/audio/scripts/lib/voxcpm2.mjs', 'runtime/cpu/llama-tts-server.exe',
+            'manifest.json', 'bin/voxcpm2.ps1', 'engine/audio/scripts/audio.mjs',
+            'engine/audio/scripts/lib/tts.mjs', 'engine/audio/scripts/lib/voxcpm2.mjs',
+            'engine/audio/scripts/lib/voxcpm2-cli.mjs', 'runtime/cpu/llama-tts-server.exe',
             'licenses/HyperFrames-APACHE-2.0.txt', 'licenses/llama.cpp-omni-MIT.txt'
         )) {
         if ($required -notin $names) { throw "Release archive entry is missing: $required" }
@@ -60,7 +61,8 @@ try {
     foreach ($file in @(
             (Join-Path $stage 'engine\audio\scripts\audio.mjs'),
             (Join-Path $stage 'engine\audio\scripts\lib\tts.mjs'),
-            (Join-Path $stage 'engine\audio\scripts\lib\voxcpm2.mjs')
+            (Join-Path $stage 'engine\audio\scripts\lib\voxcpm2.mjs'),
+            (Join-Path $stage 'engine\audio\scripts\lib\voxcpm2-cli.mjs')
         )) {
         Invoke-CoreNative -Role "release syntax check $([IO.Path]::GetFileName($file))" -FilePath 'node.exe' `
             -ProcessArguments @('--check', $file) -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
@@ -71,6 +73,9 @@ try {
     if ($identity -notmatch [regex]::Escape(([string]$manifest.runtime.commit).Substring(0, 7))) {
         throw "Release CPU server does not report the pinned runtime commit: $server"
     }
+    Invoke-CoreNative -Role 'release VoxCPM2 CLI help' -FilePath 'pwsh.exe' `
+        -ProcessArguments @('-NoProfile', '-File', (Join-Path $stage 'bin\voxcpm2.ps1'), '--help') `
+        -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
 } finally {
     Remove-CoreTemporaryDirectory -Path $stage
 }
