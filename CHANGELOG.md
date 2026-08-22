@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.11 - 2026-08-23
+
+- Added a bounded two-worker CPU pool for parallel HyperFrames narration, selected automatically only on systems with at least 12 logical CPUs and 24 GB RAM.
+- Added `HF_VOXCPM2_WORKERS` and per-worker `HF_VOXCPM2_THREADS` overrides; direct single-file synthesis continues to use one worker by default.
+
 ## 0.1.10 - 2026-08-22
 
 - Applied the configured CPU thread count to both VoxCPM2 inference backends, reducing default synthesis time without changing generated audio.

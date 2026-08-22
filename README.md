@@ -6,7 +6,7 @@ Local voice-designed speech and explicit reference-voice cloning for HyperFrames
 
 - Local VoxCPM2 synthesis through HyperFrames' supported `HF_MEDIA_ENGINE` seam.
 - CPU-only synthesis with GPU layers explicitly disabled.
-- CPU inference uses `HF_VOXCPM2_THREADS`, defaulting to at most eight logical processors.
+- CPU inference uses a bounded pool of one or two workers. Systems with at least 12 logical CPUs and 24 GB RAM automatically use two six-thread workers; smaller systems use one worker with at most eight threads.
 - A selected German Herdr narrator reference that keeps the default voice stable across segments.
 - Per-project Voice Design overrides through `voice_design` in `audio_request.json` or `--voice-design` on the audio engine.
 - Explicit `--voice <wav>` reference-voice cloning when a specific speaker is selected.
@@ -43,6 +43,18 @@ tts.ps1 --text "Your workspace is ready." --voice .\speaker.wav --output .\clone
 
 `--design` and `--voice` are mutually exclusive. The release ships no web UI or long-lived service; the command reuses the same bounded provider and local server lifecycle as HyperFrames.
 
+## CPU worker configuration
+
+HyperFrames already submits independent narration lines concurrently. The provider accepts at most two at once and preserves one request per runtime. Override automatic selection when a system needs another balance:
+
+```powershell
+$env:HF_VOXCPM2_WORKERS = '2'
+$env:HF_VOXCPM2_THREADS = '6'
+$env:HYPERFRAMES_TTS_CONCURRENCY = '2'
+```
+
+`HF_VOXCPM2_WORKERS` accepts `1` or `2`. `HF_VOXCPM2_THREADS` is the thread count per worker, and total configured worker threads must not exceed the logical CPU count. An externally managed `HF_VOXCPM2_ENDPOINT` supports one worker. The direct `tts.ps1` command selects one worker unless the user explicitly overrides it.
+
 ## Development
 
 Requirements:
@@ -63,8 +75,8 @@ pwsh -NoProfile -File scripts/test-source.ps1
 Build a release archive:
 
 ```powershell
-pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.10
-pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.10-windows-x64.zip
+pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.11
+pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.11-windows-x64.zip
 ```
 
 All upstream revisions and model metadata are pinned in [`versions.json`](versions.json).

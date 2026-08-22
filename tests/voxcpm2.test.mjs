@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   resolveVoxCPM2Reference,
   resolveVoxCPM2VoiceDesign,
+  resolveVoxCPM2WorkerPlan,
   shutdownVoxCPM2Server,
   synthesizeVoxCPM2,
   voxcpm2Available,
@@ -20,6 +21,8 @@ const ENV_KEYS = [
   "HF_VOXCPM2_MODEL_ID",
   "HF_VOXCPM2_INFERENCE_TIMESTEPS",
   "HF_VOXCPM2_MAX_STEPS",
+  "HF_VOXCPM2_THREADS",
+  "HF_VOXCPM2_WORKERS",
 ];
 
 function wavBytes(payload = "voice") {
@@ -112,6 +115,45 @@ test("availability requires a complete launcher or endpoint without a reference 
   assert.equal(
     voxcpm2Available({ HF_VOXCPM2_ENDPOINT: "http://127.0.0.1:1" }, exists),
     true,
+  );
+});
+
+test("worker plan selects the bounded resource-aware default and honors safe overrides", () => {
+  const gib = 1024 ** 3;
+  assert.deepEqual(
+    resolveVoxCPM2WorkerPlan({}, { logicalProcessors: 16, totalMemoryBytes: 32 * gib }),
+    { workers: 2, threadsPerWorker: 6 },
+  );
+  assert.deepEqual(
+    resolveVoxCPM2WorkerPlan({}, { logicalProcessors: 8, totalMemoryBytes: 32 * gib }),
+    { workers: 1, threadsPerWorker: 8 },
+  );
+  assert.deepEqual(
+    resolveVoxCPM2WorkerPlan({}, { logicalProcessors: 16, totalMemoryBytes: 16 * gib }),
+    { workers: 1, threadsPerWorker: 8 },
+  );
+  assert.deepEqual(
+    resolveVoxCPM2WorkerPlan(
+      { HF_VOXCPM2_WORKERS: "2", HF_VOXCPM2_THREADS: "4" },
+      { logicalProcessors: 8, totalMemoryBytes: 16 * gib },
+    ),
+    { workers: 2, threadsPerWorker: 4 },
+  );
+  assert.throws(
+    () =>
+      resolveVoxCPM2WorkerPlan(
+        { HF_VOXCPM2_ENDPOINT: "http://127.0.0.1:18765", HF_VOXCPM2_WORKERS: "2" },
+        { logicalProcessors: 16, totalMemoryBytes: 32 * gib },
+      ),
+    /requires provider-managed local servers/,
+  );
+  assert.throws(
+    () =>
+      resolveVoxCPM2WorkerPlan(
+        { HF_VOXCPM2_WORKERS: "2", HF_VOXCPM2_THREADS: "9" },
+        { logicalProcessors: 16, totalMemoryBytes: 32 * gib },
+      ),
+    /must not exceed logical CPUs/,
   );
 });
 
@@ -251,7 +293,7 @@ test("synthesis returns words empty and reuses the deterministic WAV cache", asy
   }
 });
 
-test("concurrent caller work is serialized to one synthesis request at a time", async () => {
+test("one external endpoint keeps concurrent caller work serialized", async () => {
   const restore = preserveEnvironment();
   const root = mkdtempSync(join(tmpdir(), "voxcpm2-serial-test-"));
   const server = await startFakeServer({ responseDelayMs: 40 });

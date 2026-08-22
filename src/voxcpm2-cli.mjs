@@ -67,6 +67,7 @@ export async function runVoxCPM2CLI(argv) {
   }
 
   try {
+    process.env.HF_VOXCPM2_WORKERS ??= "1";
     const result = await synthesizeVoxCPM2({
       text: options.text,
       voiceId: options.voiceId,
