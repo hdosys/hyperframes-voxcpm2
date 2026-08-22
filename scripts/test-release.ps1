@@ -28,7 +28,7 @@ try {
         }
     }
     foreach ($required in @(
-            'manifest.json', 'bin/voxcpm2.ps1', 'engine/audio/scripts/audio.mjs',
+            'manifest.json', 'bin/tts.ps1', 'engine/audio/scripts/audio.mjs',
             'engine/audio/scripts/lib/tts.mjs', 'engine/audio/scripts/lib/voxcpm2.mjs',
             'engine/audio/scripts/lib/voxcpm2-cli.mjs', 'runtime/cpu/llama-tts-server.exe',
             'licenses/HyperFrames-APACHE-2.0.txt', 'licenses/llama.cpp-omni-MIT.txt'
@@ -73,9 +73,12 @@ try {
     if ($identity -notmatch [regex]::Escape(([string]$manifest.runtime.commit).Substring(0, 7))) {
         throw "Release CPU server does not report the pinned runtime commit: $server"
     }
-    Invoke-CoreNative -Role 'release VoxCPM2 CLI help' -FilePath 'pwsh.exe' `
-        -ProcessArguments @('-NoProfile', '-File', (Join-Path $stage 'bin\voxcpm2.ps1'), '--help') `
-        -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
+    $help = (Invoke-CoreNative -Role 'release VoxCPM2 CLI help' -FilePath 'pwsh.exe' `
+            -ProcessArguments @('-NoProfile', '-File', (Join-Path $stage 'bin\tts.ps1'), '--help') `
+            -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
+    if ($help -notmatch '(?m)^  tts\.ps1 --text ' -or $help -match '(?i)voxcpm2\.ps1') {
+        throw 'Release VoxCPM2 CLI help does not expose the canonical tts.ps1 command.'
+    }
 } finally {
     Remove-CoreTemporaryDirectory -Path $stage
 }

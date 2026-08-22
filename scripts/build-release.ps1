@@ -107,7 +107,7 @@ try {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
-    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2.ps1') -Destination $bin
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\tts.ps1') -Destination $bin
     Copy-Item -LiteralPath $CpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
     Copy-Item -LiteralPath (Join-Path $RuntimeSource 'LICENSE') -Destination (Join-Path $licenses 'llama.cpp-omni-MIT.txt')

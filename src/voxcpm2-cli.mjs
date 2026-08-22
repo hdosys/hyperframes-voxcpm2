@@ -3,8 +3,8 @@ import { pathToFileURL } from "node:url";
 import { shutdownVoxCPM2Server, synthesizeVoxCPM2 } from "./voxcpm2.mjs";
 
 const USAGE = `Usage:
-  voxcpm2.ps1 --text TEXT --output FILE [--design DESCRIPTION] [--lang LANGUAGE]
-  voxcpm2.ps1 --text TEXT --output FILE --voice REFERENCE.wav [--lang LANGUAGE]
+  tts.ps1 --text TEXT --output FILE [--design DESCRIPTION] [--lang LANGUAGE]
+  tts.ps1 --text TEXT --output FILE --voice REFERENCE.wav [--lang LANGUAGE]
 
 Options:
   --text TEXT          Text to synthesize.
@@ -57,7 +57,7 @@ export async function runVoxCPM2CLI(argv) {
   try {
     options = parseVoxCPM2CLIArguments(argv);
   } catch (error) {
-    console.error(`voxcpm2: ${error.message}`);
+    console.error(`tts: ${error.message}`);
     console.error(USAGE);
     return 2;
   }
@@ -77,7 +77,7 @@ export async function runVoxCPM2CLI(argv) {
       hyperframesDir: process.cwd(),
     });
     if (!result.ok) {
-      console.error(`voxcpm2: ${result.error || "synthesis failed"}`);
+      console.error(`tts: ${result.error || "synthesis failed"}`);
       return 1;
     }
     console.log(options.output);

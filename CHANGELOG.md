@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8 - 2026-08-22
+
+- Renamed the direct synthesis command to `tts.ps1` and removed the previous command name.
+
 ## 0.1.7 - 2026-08-22
 
 - Updated the default calm male Voice Design to a natural conversational pace with brief pauses.
