@@ -26,7 +26,7 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
 +      throw new Error(`invalid provider "${userProvider}" (voxcpm2 | heygen | elevenlabs | kokoro)`);
 +    if (userProvider === "voxcpm2" && !voxcpm2Available())
 +      throw new Error(
-+        "provider=voxcpm2 but its reference WAV, models, or local server executable is not configured",
++        "provider=voxcpm2 but its models or local CPU server is not configured",
 +      );
      if (userProvider === "heygen" && !heygenAvailable())
        throw new Error(

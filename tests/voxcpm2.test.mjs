@@ -55,6 +55,7 @@ async function startFakeServer({ responseDelayMs = 0 } = {}) {
   let posts = 0;
   let active = 0;
   let maximumActive = 0;
+  const requests = [];
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/v1/audio/speech/models") {
       response.setHeader("content-type", "application/json");
@@ -65,9 +66,9 @@ async function startFakeServer({ responseDelayMs = 0 } = {}) {
       posts += 1;
       active += 1;
       maximumActive = Math.max(maximumActive, active);
-      for await (const _ of request) {
-        // Consume the complete request before responding.
-      }
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      requests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       if (responseDelayMs) await new Promise((done) => setTimeout(done, responseDelayMs));
       active -= 1;
       response.setHeader("content-type", "audio/wav");
@@ -83,6 +84,7 @@ async function startFakeServer({ responseDelayMs = 0 } = {}) {
   return {
     endpoint: `http://127.0.0.1:${port}`,
     posts: () => posts,
+    requests: () => requests,
     maximumActive: () => maximumActive,
     close: async () => {
       server.close();
@@ -91,14 +93,13 @@ async function startFakeServer({ responseDelayMs = 0 } = {}) {
   };
 }
 
-test("availability requires an explicit reference and complete launcher or endpoint", () => {
+test("availability requires a complete launcher or endpoint without a reference voice", () => {
   const paths = new Set(["reference.wav", "base.gguf", "acoustic.gguf", "cpu.exe"]);
   const exists = (path) => paths.has(path);
   assert.equal(voxcpm2Available({}, exists), false);
   assert.equal(
     voxcpm2Available(
       {
-        HF_VOXCPM2_REFERENCE_AUDIO: "reference.wav",
         HF_VOXCPM2_BASE_LM: "base.gguf",
         HF_VOXCPM2_ACOUSTIC: "acoustic.gguf",
         HF_VOXCPM2_SERVER_CPU: "cpu.exe",
@@ -108,19 +109,52 @@ test("availability requires an explicit reference and complete launcher or endpo
     true,
   );
   assert.equal(
-    voxcpm2Available(
-      { HF_VOXCPM2_REFERENCE_AUDIO: "reference.wav", HF_VOXCPM2_ENDPOINT: "http://127.0.0.1:1" },
-      exists,
-    ),
+    voxcpm2Available({ HF_VOXCPM2_ENDPOINT: "http://127.0.0.1:1" }, exists),
     true,
   );
 });
 
-test("reference resolution fails closed when no existing WAV was selected", () => {
+test("reference resolution defaults to Voice Design and validates an explicit WAV", () => {
+  assert.equal(resolveVoxCPM2Reference(null, () => false), null);
   assert.throws(
-    () => resolveVoxCPM2Reference(null, {}, () => false),
-    /needs an existing reference WAV/,
+    () => resolveVoxCPM2Reference("missing.wav", () => false),
+    /must select an existing reference WAV/,
   );
+});
+
+test("default synthesis requests a calm male Voice Design without reference audio", async () => {
+  const restore = preserveEnvironment();
+  const root = mkdtempSync(join(tmpdir(), "voxcpm2-design-test-"));
+  const server = await startFakeServer();
+  try {
+    process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
+    process.env.HF_VOXCPM2_REFERENCE_AUDIO = join(root, "unused-reference.wav");
+    process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
+    process.env.HF_VOXCPM2_MODEL_ID = "design-fixture-model";
+
+    const result = await synthesizeVoxCPM2({
+      text: "Explain the isolated workspace.",
+      voiceId: null,
+      lang: "en",
+      speed: 1,
+      wavAbs: join(root, "design.wav"),
+      hyperframesDir: root,
+    });
+
+    assert.deepEqual(result, { ok: true, words: [] });
+    assert.equal(server.posts(), 1);
+    const [request] = server.requests();
+    assert.equal(request.voice, "default");
+    assert.equal("reference_audio" in request, false);
+    assert.match(request.input, /^\(A deep, calm adult male narrator/);
+    assert.match(request.input, /natural pauses/);
+    assert.match(request.input, /Explain the isolated workspace\.$/);
+  } finally {
+    await shutdownVoxCPM2Server();
+    await server.close();
+    restore();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("synthesis returns words empty and reuses the deterministic WAV cache", async () => {
@@ -133,7 +167,6 @@ test("synthesis returns words empty and reuses the deterministic WAV cache", asy
     const second = join(root, "second.wav");
     writeFileSync(reference, wavBytes("reference"));
     process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
-    process.env.HF_VOXCPM2_REFERENCE_AUDIO = reference;
     process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
     process.env.HF_VOXCPM2_MODEL_ID = "fixture-model";
 
@@ -150,6 +183,8 @@ test("synthesis returns words empty and reuses the deterministic WAV cache", asy
     assert.deepEqual(firstResult, { ok: true, words: [] });
     assert.deepEqual(secondResult, { ok: true, words: [] });
     assert.equal(server.posts(), 1);
+    assert.equal(typeof server.requests()[0].reference_audio, "string");
+    assert.equal(server.requests()[0].input, request.text);
     assert.deepEqual(readFileSync(second), readFileSync(first));
   } finally {
     await shutdownVoxCPM2Server();
@@ -167,7 +202,6 @@ test("concurrent caller work is serialized to one synthesis request at a time", 
     const reference = join(root, "reference.wav");
     writeFileSync(reference, wavBytes("reference"));
     process.env.HF_VOXCPM2_ENDPOINT = server.endpoint;
-    process.env.HF_VOXCPM2_REFERENCE_AUDIO = reference;
     process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
     process.env.HF_VOXCPM2_MODEL_ID = "serial-fixture-model";
 
@@ -194,7 +228,6 @@ test("non-loopback synthesis endpoints are rejected before sending voice data", 
     const reference = join(root, "reference.wav");
     writeFileSync(reference, wavBytes("reference"));
     process.env.HF_VOXCPM2_ENDPOINT = "https://example.com";
-    process.env.HF_VOXCPM2_REFERENCE_AUDIO = reference;
     process.env.HF_VOXCPM2_CACHE_DIR = join(root, "cache");
     process.env.HF_VOXCPM2_MODEL_ID = "loopback-fixture-model";
     const result = await synthesizeVoxCPM2({

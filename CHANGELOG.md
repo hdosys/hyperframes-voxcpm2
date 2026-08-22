@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 - 2026-08-22
+
+- Default narration now uses a deep, calm male Voice Design with measured tutorial pacing and natural pauses.
+- Explicit `--voice` WAV selections continue to use reference-voice cloning.
+
 ## 0.1.4 - 2026-08-21
 
 - Removed Vulkan compilation, packaging, runtime selection, and fallback behavior.
