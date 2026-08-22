@@ -86,7 +86,7 @@ try {
         throw 'CPU server did not report the pinned runtime commit.'
     }
 
-    $patch = Join-Path $repositoryRoot 'patches\hyperframes-0.8.6.patch'
+    $patch = Join-Path $repositoryRoot "patches\hyperframes-$($versions.hyperframes.version).patch"
     Invoke-CoreNative -Role 'HyperFrames provider patch check' -FilePath 'git.exe' `
         -ProcessArguments @('-C', $hyperframesSource, 'apply', '--check', '--whitespace=error-all', $patch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null

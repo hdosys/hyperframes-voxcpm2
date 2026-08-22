@@ -31,7 +31,7 @@ try {
     if ($commit -cne [string]$versions.hyperframes.commit) {
         throw "Unexpected HyperFrames patch fixture commit: $commit"
     }
-    $patch = Join-Path $root 'patches\hyperframes-0.8.6.patch'
+    $patch = Join-Path $root "patches\hyperframes-$($versions.hyperframes.version).patch"
     Invoke-CoreNative -Role 'HyperFrames integration patch check' -FilePath 'git.exe' `
         -ProcessArguments @('-C', $source, 'apply', '--check', '--whitespace=error-all', $patch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null

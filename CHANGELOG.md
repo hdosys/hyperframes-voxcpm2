@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 - 2026-08-22
+
+- Updated the bundled audio engine integration to HyperFrames 0.8.8.
+
 ## 0.1.5 - 2026-08-22
 
 - Default narration now uses a deep, calm male Voice Design with measured tutorial pacing and natural pauses.
