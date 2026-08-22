@@ -4,7 +4,7 @@ The global OpenCode working agreement owns reusable workflow. This file owns onl
 
 - `versions.json` is the canonical owner for every upstream source, model, and tool version used by a release.
 - `src/voxcpm2.mjs` owns the local provider lifecycle, synthesis request, serialization, and audio cache behavior.
-- `patches/` owns the smallest exact HyperFrames integration patch. Do not fork or vendor HyperFrames.
+- `patches/` owns the smallest exact upstream integration patches. Do not fork or vendor upstream source.
 - `scripts/build-release.ps1` owns the Windows x64 CPU-only release bundle.
 - Never commit model weights, runtime binaries, generated archives, logs, credentials, or local synthesis output.
 - A user-approved narrator reference promoted into `assets/` is product source; unselected audition output remains local and untracked.

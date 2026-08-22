@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10 - 2026-08-22
+
+- Applied the configured CPU thread count to both VoxCPM2 inference backends, reducing default synthesis time without changing generated audio.
+
 ## 0.1.9 - 2026-08-22
 
 - Added the selected German Herdr narrator reference as the stable default voice across segments.

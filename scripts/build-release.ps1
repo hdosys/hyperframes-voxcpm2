@@ -57,6 +57,13 @@ try {
     if ($runtimeCommit -cne [string]$versions.runtime.commit) {
         throw "Unexpected llama.cpp-omni commit: $runtimeCommit"
     }
+    $runtimePatch = Join-Path $repositoryRoot "patches\llama.cpp-omni-$($versions.runtime.ref)-threads.patch"
+    Invoke-CoreNative -Role 'llama.cpp-omni thread patch check' -FilePath 'git.exe' `
+        -ProcessArguments @('-C', $RuntimeSource, 'apply', '--check', '--whitespace=error-all', $runtimePatch) `
+        -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
+    Invoke-CoreNative -Role 'llama.cpp-omni thread patch application' -FilePath 'git.exe' `
+        -ProcessArguments @('-C', $RuntimeSource, 'apply', '--whitespace=error-all', $runtimePatch) `
+        -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
 
     if ([string]::IsNullOrWhiteSpace($CpuServer)) {
         $cmake = (Get-Command 'cmake.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source

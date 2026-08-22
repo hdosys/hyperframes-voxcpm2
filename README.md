@@ -6,6 +6,7 @@ Local voice-designed speech and explicit reference-voice cloning for HyperFrames
 
 - Local VoxCPM2 synthesis through HyperFrames' supported `HF_MEDIA_ENGINE` seam.
 - CPU-only synthesis with GPU layers explicitly disabled.
+- CPU inference uses `HF_VOXCPM2_THREADS`, defaulting to at most eight logical processors.
 - A selected German Herdr narrator reference that keeps the default voice stable across segments.
 - Per-project Voice Design overrides through `voice_design` in `audio_request.json` or `--voice-design` on the audio engine.
 - Explicit `--voice <wav>` reference-voice cloning when a specific speaker is selected.
@@ -62,8 +63,8 @@ pwsh -NoProfile -File scripts/test-source.ps1
 Build a release archive:
 
 ```powershell
-pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.9
-pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.9-windows-x64.zip
+pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.10
+pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.10-windows-x64.zip
 ```
 
 All upstream revisions and model metadata are pinned in [`versions.json`](versions.json).

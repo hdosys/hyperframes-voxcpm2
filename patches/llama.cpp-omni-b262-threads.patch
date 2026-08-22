@@ -1,0 +1,56 @@
+diff --git a/tools/omni/voxcpm2/voxcpm2_runtime.cpp b/tools/omni/voxcpm2/voxcpm2_runtime.cpp
+--- a/tools/omni/voxcpm2/voxcpm2_runtime.cpp
++++ b/tools/omni/voxcpm2/voxcpm2_runtime.cpp
+@@ -1,6 +1,7 @@
+ #include "voxcpm2_runtime.h"
+ 
+ #include "ggml-alloc.h"
++#include "ggml-cpu.h"
+ #include "gguf.h"
+ #include "log.h"
+ 
+@@ -690,6 +691,18 @@ bool VoxCPM2Runtime::init(const std::string & base_lm_path,
+     return true;
+ }
+ 
++void VoxCPM2Runtime::set_n_threads(int n_threads) {
++    if (n_threads < 1) {
++        return;
++    }
++    if (base_lm.ctx) {
++        llama_set_n_threads(base_lm.ctx, n_threads, n_threads);
++    }
++    if (backend && ggml_backend_is_cpu(backend)) {
++        ggml_backend_cpu_set_n_threads(backend, n_threads);
++    }
++}
++
+ bool VoxCPM2Runtime::build_text_tokenizer_metadata(const std::string & base_lm_path) {
+     tokenizer_available = false;
+     cjk_split_map.clear();
+diff --git a/tools/omni/voxcpm2/voxcpm2_runtime.h b/tools/omni/voxcpm2/voxcpm2_runtime.h
+--- a/tools/omni/voxcpm2/voxcpm2_runtime.h
++++ b/tools/omni/voxcpm2/voxcpm2_runtime.h
+@@ -161,2 +161,3 @@ struct VoxCPM2Runtime {
+     void reset_state();
++    void set_n_threads(int n_threads);
+     void free();
+diff --git a/tools/server/server-voxcpm2.cpp b/tools/server/server-voxcpm2.cpp
+--- a/tools/server/server-voxcpm2.cpp
++++ b/tools/server/server-voxcpm2.cpp
+@@ -259,6 +259,7 @@ int main(int argc, char ** argv) {
+                 res_error(res, format_error_response("VoxCPM2 init failed: " + err, "server_error"));
+                 return;
+             }
++            rt->set_n_threads(params.cpuparams.n_threads);
+             state.runtime = rt;
+         }
+ 
+@@ -490,6 +491,7 @@ int main(int argc, char ** argv) {
+             llama_backend_free();
+             return 1;
+         }
++        rt->set_n_threads(params.cpuparams.n_threads);
+         state.runtime = rt;
+         LOG_INF("VoxCPM2 loaded, sample_rate=%d\n", rt->sample_rate());
+     }
