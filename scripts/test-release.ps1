@@ -2,12 +2,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Archive
+    [string]$Archive,
+    [string]$ExpectedDownstreamCommit = ''
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
+$root = Get-CoreRepositoryRoot
 $Archive = [IO.Path]::GetFullPath($Archive)
 if (-not (Test-Path -LiteralPath $Archive -PathType Leaf)) { throw "Release archive is missing: $Archive" }
 $sidecar = "$Archive.sha256"
@@ -49,6 +51,30 @@ try {
     $manifest = [IO.File]::ReadAllText((Join-Path $stage 'manifest.json')) | ConvertFrom-Json
     if ([int]$manifest.schemaVersion -ne 1 -or [string]$manifest.platform -cne 'windows-x64') {
         throw 'Release manifest identity is invalid.'
+    }
+    if ($null -eq $manifest.downstream -or
+        [string]$manifest.downstream.repository -cne 'https://github.com/hdosys/hyperframes-voxcpm2.git' -or
+        [string]$manifest.downstream.commit -notmatch '^[0-9a-f]{40}$' -or
+        $manifest.downstream.dirty -isnot [bool]) {
+        throw 'Release manifest downstream identity is invalid.'
+    }
+    $patchRecords = @($manifest.downstream.patches)
+    $sourcePatches = @(Get-ChildItem -LiteralPath (Join-Path $root 'patches') -File -Filter '*.patch' | Sort-Object Name)
+    if ($patchRecords.Count -ne $sourcePatches.Count) {
+        throw 'Release manifest does not identify every downstream patch.'
+    }
+    foreach ($sourcePatch in $sourcePatches) {
+        $relative = "patches/$($sourcePatch.Name)"
+        $matchingRecords = @($patchRecords | Where-Object { [string]$_.path -ceq $relative })
+        if ($matchingRecords.Count -ne 1 -or [string]$matchingRecords[0].target -notmatch '^(runtime|hyperframes)$' -or
+            [string]$matchingRecords[0].sha256 -notmatch '^[0-9a-f]{64}$' -or
+            [string]$matchingRecords[0].sha256 -cne (Get-FileHash -LiteralPath $sourcePatch.FullName -Algorithm SHA256).Hash.ToLowerInvariant()) {
+            throw "Release manifest patch identity mismatch: $relative"
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedDownstreamCommit) -and
+        ([string]$manifest.downstream.commit -cne $ExpectedDownstreamCommit -or [bool]$manifest.downstream.dirty)) {
+        throw 'Release archive was not built from the expected clean downstream commit.'
     }
     foreach ($record in @($manifest.files)) {
         $path = Join-Path $stage ([string]$record.path).Replace('/', '\')

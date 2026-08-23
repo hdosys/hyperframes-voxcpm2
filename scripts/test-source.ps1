@@ -31,7 +31,7 @@ try {
     if ($commit -cne [string]$versions.hyperframes.commit) {
         throw "Unexpected HyperFrames patch fixture commit: $commit"
     }
-    $patch = Join-Path $root "patches\hyperframes-$($versions.hyperframes.version).patch"
+    $patch = Join-Path $root 'patches\hyperframes-voxcpm2.patch'
     Invoke-CoreNative -Role 'HyperFrames integration patch check' -FilePath 'git.exe' `
         -ProcessArguments @('-C', $source, 'apply', '--check', '--whitespace=error-all', $patch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
@@ -51,6 +51,22 @@ try {
         Invoke-CoreNative -Role "syntax check $([IO.Path]::GetFileName($file))" -FilePath 'node.exe' `
             -ProcessArguments @('--check', $file) -WorkingDirectory $source -TimeoutSeconds 30 | Out-Null
     }
+
+    $runtimeSource = Join-Path $stage 'r'
+    Invoke-CoreNative -Role 'llama.cpp-omni patch fixture clone' -FilePath 'git.exe' `
+        -ProcessArguments @('clone', '--branch', [string]$versions.runtime.ref, '--depth', '1',
+            '--config', 'core.longpaths=true', [string]$versions.runtime.repository, $runtimeSource) `
+        -WorkingDirectory $stage -TimeoutSeconds 300 | Out-Null
+    $runtimeCommit = (Invoke-CoreNative -Role 'llama.cpp-omni patch fixture identity' -FilePath 'git.exe' `
+            -ProcessArguments @('-C', $runtimeSource, 'rev-parse', 'HEAD') `
+            -WorkingDirectory $stage -TimeoutSeconds 30 | Select-Object -Last 1).Trim()
+    if ($runtimeCommit -cne [string]$versions.runtime.commit) {
+        throw "Unexpected llama.cpp-omni patch fixture commit: $runtimeCommit"
+    }
+    $runtimePatch = Join-Path $root "patches\llama.cpp-omni-$($versions.runtime.ref)-threads.patch"
+    Invoke-CoreNative -Role 'llama.cpp-omni integration patch check' -FilePath 'git.exe' `
+        -ProcessArguments @('-C', $runtimeSource, 'apply', '--check', '--whitespace=error-all', $runtimePatch) `
+        -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
 } finally {
     Remove-CoreTemporaryDirectory -Path $stage
 }

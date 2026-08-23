@@ -1,17 +1,26 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the v prefix"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   windows-x64:
     runs-on: windows-2022
     timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -20,6 +29,34 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
+
+      - name: Validate release request
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ($env:GITHUB_REF_TYPE -cne 'branch' -or $env:GITHUB_REF_NAME -cne 'main') {
+            throw 'Releases must be dispatched from main.'
+          }
+          $version = $env:RELEASE_VERSION
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid release version: $version"
+          }
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $versions = Get-Content versions.json -Raw | ConvertFrom-Json
+          if ([string]$package.version -cne $version -or [string]$versions.releaseVersion -cne $version) {
+            throw "package.json and versions.json must both declare $version."
+          }
+          $tag = "v$version"
+          git fetch --force --tags origin
+          if (@(git tag --list $tag).Count -ne 0) {
+            throw "Tag already exists: $tag"
+          }
+          $releases = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing releases.' }
+          if (@($releases | Where-Object { $_.tagName -ceq $tag }).Count -ne 0) {
+            throw "Release already exists: $tag"
+          }
 
       - name: Test provider
         shell: pwsh
@@ -30,17 +67,17 @@ jobs:
       - name: Build and verify release
         shell: pwsh
         run: |
-          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $version = $env:RELEASE_VERSION
           ./scripts/build-release.ps1 -Version $version
-          ./scripts/test-release.ps1 -Archive "dist/hyperframes-voxcpm2-v$version-windows-x64.zip"
+          ./scripts/test-release.ps1 -Archive "dist/hyperframes-voxcpm2-v$version-windows-x64.zip" -ExpectedDownstreamCommit $env:GITHUB_SHA
 
       - name: Publish GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          $version = $tag.TrimStart('v')
+          $version = $env:RELEASE_VERSION
+          $tag = "v$version"
           $archive = "dist/hyperframes-voxcpm2-$tag-windows-x64.zip"
           $sidecar = "$archive.sha256"
           $heading = Get-Content CHANGELOG.md | Where-Object { $_ -match "^## $([regex]::Escape($version)) - " } | Select-Object -First 1
@@ -48,4 +85,28 @@ jobs:
             throw "CHANGELOG.md is missing the exact $version release heading."
           }
           $notes = "https://github.com/hdosys/hyperframes-voxcpm2/blob/$tag/CHANGELOG.md#$($version.Replace('.', ''))---$($Matches[1])"
-          gh release create $tag $archive $sidecar --verify-tag --title $tag --notes $notes
+          git fetch --force --tags origin
+          if (@(git tag --list $tag).Count -ne 0) { throw "Tag appeared during the build: $tag" }
+          $releases = gh release list --repo $env:GITHUB_REPOSITORY --limit 100 --json tagName | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not recheck existing releases.' }
+          if (@($releases | Where-Object { $_.tagName -ceq $tag }).Count -ne 0) {
+            throw "Release appeared during the build: $tag"
+          }
+          $expectedHash = (Get-Content $sidecar -Raw).Trim().Split()[0].ToLowerInvariant()
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedHash) {
+            throw 'Archive changed after release verification.'
+          }
+          gh release create $tag $archive $sidecar --target $env:GITHUB_SHA --title $tag --notes $notes
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed: $tag" }
+          $download = Join-Path $env:RUNNER_TEMP "published-$version"
+          New-Item -ItemType Directory -Path $download | Out-Null
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern (Split-Path $archive -Leaf) --dir $download
+          if ($LASTEXITCODE -ne 0) { throw "Published archive download failed: $tag" }
+          $published = Join-Path $download (Split-Path $archive -Leaf)
+          if ((Get-FileHash $published -Algorithm SHA256).Hash.ToLowerInvariant() -cne $expectedHash) {
+            throw "Published archive hash mismatch: $tag"
+          }
+          git fetch --force --tags origin
+          $publishedCommit = (git rev-list -n 1 $tag).Trim()
+          if ($publishedCommit -cne $env:GITHUB_SHA) { throw "Published tag does not target the workflow commit: $tag" }
+          "Published $tag from $publishedCommit with SHA-256 $expectedHash" >> $env:GITHUB_STEP_SUMMARY

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "releaseVersion": "0.1.11",
+  "releaseVersion": "0.1.12",
   "hyperframes": {
-    "version": "0.8.8",
-    "tag": "v0.8.8",
-    "commit": "6f82acf50c2942161264fa8d48c6fbce1c3b4659",
+    "version": "0.8.10",
+    "tag": "v0.8.10",
+    "commit": "59a69a145bfbd0f10dee72246b68ee5d9bd71063",
     "repository": "https://github.com/heygen-com/hyperframes.git"
   },
   "runtime": {

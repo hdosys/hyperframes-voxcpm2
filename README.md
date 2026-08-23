@@ -22,7 +22,7 @@ Models are not included in releases. A consuming application must require the us
 
 ```text
 bin/tts.ps1                 Direct PowerShell CLI
-engine/audio/                 Patched HyperFrames 0.8.8 audio engine
+engine/audio/                 Integrated HyperFrames audio engine
 reference/herdr-narrator-de.wav  Default narrator reference
 runtime/cpu/                  Generic x64 CPU server
 licenses/                     Upstream licenses

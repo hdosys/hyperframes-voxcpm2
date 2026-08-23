@@ -5,8 +5,7 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
     [string]$OutputDirectory = '',
-    [string]$RuntimeSource = '',
-    [string]$CpuServer = ''
+    [string]$RuntimeSource = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,6 +16,28 @@ $versions = Get-CoreVersions
 if ([string]$versions.releaseVersion -cne $Version) {
     throw "versions.json declares $($versions.releaseVersion), not $Version"
 }
+$downstreamCommit = (Invoke-CoreNative -Role 'downstream source identity' -FilePath 'git.exe' `
+        -ProcessArguments @('-C', $repositoryRoot, 'rev-parse', 'HEAD') `
+        -WorkingDirectory $repositoryRoot -TimeoutSeconds 30 | Select-Object -Last 1).Trim()
+$downstreamDirty = @(Invoke-CoreNative -Role 'downstream source status' -FilePath 'git.exe' `
+        -ProcessArguments @('-C', $repositoryRoot, 'status', '--porcelain') `
+        -WorkingDirectory $repositoryRoot -TimeoutSeconds 30).Count -ne 0
+$runtimePatchRelative = "patches/llama.cpp-omni-$($versions.runtime.ref)-threads.patch"
+$hyperframesPatchRelative = 'patches/hyperframes-voxcpm2.patch'
+$runtimePatch = Join-Path $repositoryRoot $runtimePatchRelative.Replace('/', '\')
+$hyperframesPatch = Join-Path $repositoryRoot $hyperframesPatchRelative.Replace('/', '\')
+$appliedPatches = @(
+    [ordered]@{
+        target = 'runtime'
+        path = $runtimePatchRelative
+        sha256 = (Get-FileHash -LiteralPath $runtimePatch -Algorithm SHA256).Hash.ToLowerInvariant()
+    },
+    [ordered]@{
+        target = 'hyperframes'
+        path = $hyperframesPatchRelative
+        sha256 = (Get-FileHash -LiteralPath $hyperframesPatch -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+)
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repositoryRoot 'dist'
 }
@@ -57,7 +78,6 @@ try {
     if ($runtimeCommit -cne [string]$versions.runtime.commit) {
         throw "Unexpected llama.cpp-omni commit: $runtimeCommit"
     }
-    $runtimePatch = Join-Path $repositoryRoot "patches\llama.cpp-omni-$($versions.runtime.ref)-threads.patch"
     Invoke-CoreNative -Role 'llama.cpp-omni thread patch check' -FilePath 'git.exe' `
         -ProcessArguments @('-C', $RuntimeSource, 'apply', '--check', '--whitespace=error-all', $runtimePatch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
@@ -65,40 +85,35 @@ try {
         -ProcessArguments @('-C', $RuntimeSource, 'apply', '--whitespace=error-all', $runtimePatch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
 
-    if ([string]::IsNullOrWhiteSpace($CpuServer)) {
-        $cmake = (Get-Command 'cmake.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
-        $common = @(
-            '-G', 'Visual Studio 17 2022', '-A', 'x64', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
-            '-DGGML_NATIVE=OFF', '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF',
-            '-DLLAMA_BUILD_APP=OFF', '-DLLAMA_BUILD_UI=OFF', '-DLLAMA_BUILD_TOOLS=ON',
-            '-DLLAMA_BUILD_SERVER=ON', '-DLLAMA_TOOLS_INSTALL=OFF', '-DLLAMA_OPENSSL=OFF'
-        )
-        $cpuBuild = Join-Path $stage 'c'
-        Invoke-CoreNative -Role 'CPU runtime configuration' -FilePath $cmake `
-            -ProcessArguments (@('-S', $RuntimeSource, '-B', $cpuBuild) + $common + @('-DGGML_VULKAN=OFF')) `
-            -WorkingDirectory $stage -TimeoutSeconds 300 | Out-Null
-        Invoke-CoreNative -Role 'CPU runtime build' -FilePath $cmake `
-            -ProcessArguments @('--build', $cpuBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', '8') `
-            -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
-        $CpuServer = Join-Path $cpuBuild 'bin\Release\llama-tts-server.exe'
+    $cmake = (Get-Command 'cmake.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    $common = @(
+        '-G', 'Visual Studio 17 2022', '-A', 'x64', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
+        '-DGGML_NATIVE=OFF', '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF',
+        '-DLLAMA_BUILD_APP=OFF', '-DLLAMA_BUILD_UI=OFF', '-DLLAMA_BUILD_TOOLS=ON',
+        '-DLLAMA_BUILD_SERVER=ON', '-DLLAMA_TOOLS_INSTALL=OFF', '-DLLAMA_OPENSSL=OFF'
+    )
+    $cpuBuild = Join-Path $stage 'c'
+    Invoke-CoreNative -Role 'CPU runtime configuration' -FilePath $cmake `
+        -ProcessArguments (@('-S', $RuntimeSource, '-B', $cpuBuild) + $common + @('-DGGML_VULKAN=OFF')) `
+        -WorkingDirectory $stage -TimeoutSeconds 300 | Out-Null
+    Invoke-CoreNative -Role 'CPU runtime build' -FilePath $cmake `
+        -ProcessArguments @('--build', $cpuBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', '8') `
+        -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
+    $cpuServer = Join-Path $cpuBuild 'bin\Release\llama-tts-server.exe'
+    if (-not (Test-Path -LiteralPath $cpuServer -PathType Leaf)) {
+        throw "Built CPU server is missing: $cpuServer"
     }
-
-    $CpuServer = [IO.Path]::GetFullPath($CpuServer)
-    if (-not (Test-Path -LiteralPath $CpuServer -PathType Leaf)) {
-        throw "CPU server input is missing: $CpuServer"
-    }
-    $identity = (Invoke-CoreNative -Role 'CPU server identity' -FilePath $CpuServer `
+    $identity = (Invoke-CoreNative -Role 'CPU server identity' -FilePath $cpuServer `
             -ProcessArguments @('--version') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
     if ($identity -notmatch [regex]::Escape(([string]$versions.runtime.commit).Substring(0, 7))) {
         throw 'CPU server did not report the pinned runtime commit.'
     }
 
-    $patch = Join-Path $repositoryRoot "patches\hyperframes-$($versions.hyperframes.version).patch"
     Invoke-CoreNative -Role 'HyperFrames provider patch check' -FilePath 'git.exe' `
-        -ProcessArguments @('-C', $hyperframesSource, 'apply', '--check', '--whitespace=error-all', $patch) `
+        -ProcessArguments @('-C', $hyperframesSource, 'apply', '--check', '--whitespace=error-all', $hyperframesPatch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
     Invoke-CoreNative -Role 'HyperFrames provider patch application' -FilePath 'git.exe' `
-        -ProcessArguments @('-C', $hyperframesSource, 'apply', '--whitespace=error-all', $patch) `
+        -ProcessArguments @('-C', $hyperframesSource, 'apply', '--whitespace=error-all', $hyperframesPatch) `
         -WorkingDirectory $stage -TimeoutSeconds 30 | Out-Null
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2.mjs') `
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2.mjs')
@@ -117,7 +132,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\tts.ps1') -Destination $bin
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'assets\herdr-narrator-de.wav') -Destination $reference
-    Copy-Item -LiteralPath $CpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
+    Copy-Item -LiteralPath $cpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
     Copy-Item -LiteralPath (Join-Path $RuntimeSource 'LICENSE') -Destination (Join-Path $licenses 'llama.cpp-omni-MIT.txt')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'LICENSE') -Destination (Join-Path $licenses 'hyperframes-voxcpm2-APACHE-2.0.txt')
@@ -152,6 +167,12 @@ try {
         schemaVersion = 1
         releaseVersion = $Version
         platform = 'windows-x64'
+        downstream = [ordered]@{
+            repository = 'https://github.com/hdosys/hyperframes-voxcpm2.git'
+            commit = $downstreamCommit
+            dirty = $downstreamDirty
+            patches = $appliedPatches
+        }
         hyperframes = $versions.hyperframes
         runtime = $versions.runtime
         models = $versions.models

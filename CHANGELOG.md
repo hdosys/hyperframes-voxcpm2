@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12 - 2026-08-23
+
+- Updated the bundled audio engine integration to HyperFrames 0.8.10 while preserving local VoxCPM2 voice design, reference cloning, and bounded worker behavior.
+- Release manifests now identify the exact downstream source and active integration patches used to build the CPU runtime.
+
 ## 0.1.11 - 2026-08-23
 
 - Added a bounded two-worker CPU pool for parallel HyperFrames narration, selected automatically only on systems with at least 12 logical CPUs and 24 GB RAM.
