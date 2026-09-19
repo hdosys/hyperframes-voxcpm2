@@ -5,7 +5,8 @@ param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$Version,
     [string]$OutputDirectory = '',
-    [string]$RuntimeSource = ''
+    [string]$RuntimeSource = '',
+    [switch]$Local
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,8 @@ $downstreamCommit = (Invoke-CoreNative -Role 'downstream source identity' -FileP
 $downstreamDirty = @(Invoke-CoreNative -Role 'downstream source status' -FilePath 'git.exe' `
         -ProcessArguments @('-C', $repositoryRoot, 'status', '--porcelain') `
         -WorkingDirectory $repositoryRoot -TimeoutSeconds 30).Count -ne 0
+if ($downstreamDirty) { throw 'Build requires a clean coherent source commit.' }
+$displayVersion = if ($Local) { [DateTime]::UtcNow.ToString('yyyy.MM.dd.HHmmZ') } else { $Version }
 $runtimePatchRelative = "patches/llama.cpp-omni-$($versions.runtime.ref)-threads.patch"
 $hyperframesPatchRelative = 'patches/hyperframes-voxcpm2.patch'
 $runtimePatch = Join-Path $repositoryRoot $runtimePatchRelative.Replace('/', '\')
@@ -97,7 +100,7 @@ try {
         -ProcessArguments (@('-S', $RuntimeSource, '-B', $cpuBuild) + $common + @('-DGGML_VULKAN=OFF')) `
         -WorkingDirectory $stage -TimeoutSeconds 300 | Out-Null
     Invoke-CoreNative -Role 'CPU runtime build' -FilePath $cmake `
-        -ProcessArguments @('--build', $cpuBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', '8') `
+        -ProcessArguments @('--build', $cpuBuild, '--config', 'Release', '--target', 'llama-tts-server', '--parallel', [string][Environment]::ProcessorCount) `
         -WorkingDirectory $stage -TimeoutSeconds 1200 | Out-Null
     $cpuServer = Join-Path $cpuBuild 'bin\Release\llama-tts-server.exe'
     if (-not (Test-Path -LiteralPath $cpuServer -PathType Leaf)) {
@@ -119,6 +122,12 @@ try {
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2.mjs')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2-cli.mjs') `
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs')
+    foreach ($name in @('supertonic.mjs', 'supertonic-runner.py')) {
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot "src\$name") `
+            -Destination (Join-Path $hyperframesSource "skills\media-use\audio\scripts\lib\$name")
+    }
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'versions.json') `
+        -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\versions.json')
 
     $bundle = Join-Path $stage 'bundle'
     $engine = Join-Path $bundle 'engine'
@@ -131,6 +140,9 @@ try {
     }
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\tts.ps1') -Destination $bin
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'scripts\download-supertonic.py') -Destination $bin
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'requirements.txt') -Destination $bundle
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'versions.json') -Destination $bundle
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'assets\herdr-narrator-de.wav') -Destination $reference
     Copy-Item -LiteralPath $cpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
@@ -165,7 +177,7 @@ try {
         })
     $releaseManifest = [ordered]@{
         schemaVersion = 1
-        releaseVersion = $Version
+        releaseVersion = $displayVersion
         platform = 'windows-x64'
         downstream = [ordered]@{
             repository = 'https://github.com/hdosys/hyperframes-voxcpm2.git'
@@ -176,13 +188,14 @@ try {
         hyperframes = $versions.hyperframes
         runtime = $versions.runtime
         models = $versions.models
+        supertonic = $versions.supertonic
         referenceAudio = $versions.referenceAudio
         files = $fileRecords
     }
     [IO.File]::WriteAllText((Join-Path $bundle 'manifest.json'),
         ($releaseManifest | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
 
-    $archiveName = "hyperframes-voxcpm2-v$Version-windows-x64.zip"
+    $archiveName = if ($Local) { 'hyperframes-voxcpm2-local-windows-x64.zip' } else { "hyperframes-voxcpm2-v$Version-windows-x64.zip" }
     $archive = Join-Path $OutputDirectory $archiveName
     $sidecar = "$archive.sha256"
     Remove-Item -LiteralPath $archive, $sidecar -Force -ErrorAction SilentlyContinue

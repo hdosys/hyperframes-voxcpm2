@@ -1,10 +1,38 @@
 # HyperFrames VoxCPM2
 
-Local voice-designed speech and explicit reference-voice cloning for HyperFrames on Windows. The release bundle supplies a versioned HyperFrames audio-engine override plus one CPU-only build of `llama-tts-server`.
+Local German speech for HyperFrames on Windows. Supertonic 3 is the default CPU engine, with ten built-in voices. VoxCPM2 remains explicitly selectable for voice design and reference-voice cloning. The bundle supplies a versioned HyperFrames audio-engine override and the optional VoxCPM2 CPU server.
 
-## What it provides
+## Engineering approach
 
-- Local VoxCPM2 synthesis through HyperFrames' supported `HF_MEDIA_ENGINE` seam.
+Reuse HyperFrames' existing audio-engine seam and the official Supertonic Python SDK. Do not fork inference code or add a network service. Model assets are verified once at admission, then inference runs offline.
+
+## How it works
+
+The Node provider serializes requests to a bounded Python process using ONNX Runtime's CPU provider with 16 threads. It uses the original, unquantized ONNX models, ten inference steps and sequential chunks of at most 300 characters, including overlong sentences. Batch mode is off. Built-in presets are M1, M2, M3, M4, M5, F1, F2, F3, F4 and F5. M1 is the default. Identical requests reuse the project audio cache.
+
+## Supertonic setup and first use
+
+Requirements: Windows x64, Node.js 22+, PowerShell 7, Python 3.13 and `uv`. Extract the verified bundle, then run from its root, choosing an empty model directory:
+
+```powershell
+uv venv .venv --python 3.13
+uv pip sync requirements.txt --python .venv\Scripts\python.exe --require-hashes --only-binary :all:
+python bin\download-supertonic.py --model-dir C:\Models\supertonic-3
+$env:HF_SUPERTONIC_PYTHON = (Resolve-Path .venv\Scripts\python.exe).Path
+$env:HF_SUPERTONIC_MODEL_DIR = 'C:\Models\supertonic-3'
+.\bin\tts.ps1 --text "Willkommen. Dein Arbeitsbereich ist bereit." --output .\welcome.wav
+.\bin\tts.ps1 --text "Diese Stimme wurde künstlich erzeugt." --voice F1 --lang de --output .\female.wav
+```
+
+The exact model is `supertone-oss-archive/supertonic-3` at `aafc6e32416a594460b32413efc49d7fe4ce6d46`. No alternate revision, SDK auto-download, quantization or voice cloning is used by this engine. Model files and all ten preset styles are admitted using their upstream content identities. A failed/incomplete admission has no completion marker; preserve it and choose a new empty directory rather than overwriting uncertain files.
+
+**Model terms:** Supertonic's weights and presets use OpenRAIL-M, not the source-code license. Read the downloaded `LICENSE`. Clearly disclose that generated speech is machine-generated wherever it is used or distributed, and comply with its use restrictions, including the prohibition on nonconsensual impersonation. The presets do not reuse the VoxCPM2 narrator reference.
+
+For HyperFrames, set `HF_MEDIA_ENGINE` to the extracted `engine` directory. Select `--provider supertonic --voice M1 --lang de` or use `provider`, `voice` and `lang` in the audio request. No provider selection defaults to Supertonic; missing setup fails with an actionable error rather than silently using another engine. `HF_SUPERTONIC_CACHE_DIR` optionally selects another audio-cache directory.
+
+## VoxCPM2 alternative
+
+- Explicit `--provider voxcpm2` synthesis through the same audio-engine seam.
 - CPU-only synthesis with GPU layers explicitly disabled.
 - CPU inference uses a bounded pool of one or two workers. Systems with at least 12 logical CPUs and 24 GB RAM automatically use two six-thread workers; smaller systems use one worker with at most eight threads.
 - A selected German Herdr narrator reference that keeps the default voice stable across segments.
@@ -21,7 +49,10 @@ Models are not included in releases. A consuming application must require the us
 ## Release contents
 
 ```text
-bin/tts.ps1                 Direct PowerShell CLI
+bin/tts.ps1                    Direct PowerShell CLI
+bin/download-supertonic.py      Verified model admission
+requirements.txt               Hashed Python dependency lock
+versions.json                  Exact model/source identities
 engine/audio/                 Integrated HyperFrames audio engine
 reference/herdr-narrator-de.wav  Default narrator reference
 runtime/cpu/                  Generic x64 CPU server
@@ -33,12 +64,12 @@ The project publishes GitHub Release archives. It deliberately has no installer 
 
 ## Direct CLI
 
-The consuming environment supplies the verified paths in `HF_VOXCPM2_BASE_LM`, `HF_VOXCPM2_ACOUSTIC`, `HF_VOXCPM2_SERVER_CPU`, and `HF_VOXCPM2_REFERENCE_AUDIO`. Synthesize with the selected default narrator, override it with Voice Design for one request, or select another explicit reference WAV:
+For VoxCPM2, the consuming environment supplies the verified paths in `HF_VOXCPM2_BASE_LM`, `HF_VOXCPM2_ACOUSTIC`, `HF_VOXCPM2_SERVER_CPU`, and `HF_VOXCPM2_REFERENCE_AUDIO`. Synthesize with the selected narrator, override it with Voice Design for one request, or select another explicit reference WAV:
 
 ```powershell
-tts.ps1 --text "Your workspace is ready." --output .\default.wav
-tts.ps1 --text "Your workspace is ready." --design "A concise, energetic technical narrator." --output .\custom.wav
-tts.ps1 --text "Your workspace is ready." --voice .\speaker.wav --output .\clone.wav
+tts.ps1 --provider voxcpm2 --text "Your workspace is ready." --output .\default.wav
+tts.ps1 --provider voxcpm2 --text "Your workspace is ready." --design "A concise, energetic technical narrator." --output .\custom.wav
+tts.ps1 --provider voxcpm2 --text "Your workspace is ready." --voice .\speaker.wav --output .\clone.wav
 ```
 
 `--design` and `--voice` are mutually exclusive. The release ships no web UI or long-lived service; the command reuses the same bounded provider and local server lifecycle as HyperFrames.
@@ -72,11 +103,12 @@ npm test
 pwsh -NoProfile -File scripts/test-source.ps1
 ```
 
-Build a release archive:
+Build the canonical local archive from a clean commit (no release publication):
 
 ```powershell
-pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.11
-pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-v0.1.11-windows-x64.zip
+pwsh -NoProfile -File scripts/build-release.ps1 -Version 0.1.12 -Local
+pwsh -NoProfile -File scripts/test-release.ps1 -Archive dist/hyperframes-voxcpm2-local-windows-x64.zip
 ```
 
 All upstream revisions and model metadata are pinned in [`versions.json`](versions.json).
+The local archive's manifest carries a UTC freshness label. Public release versions remain separate. Supertonic's Python environment is installed from the lock by the consumer, not copied from a developer's virtual environment. The bundle does not include model weights.

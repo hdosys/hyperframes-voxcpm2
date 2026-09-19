@@ -8,6 +8,7 @@ test("CLI maps one design or reference selection into the provider contract", ()
   assert.deepEqual(
     parseVoxCPM2CLIArguments(
       [
+        "--provider", "voxcpm2",
         "--text",
         "Hello there.",
         "--output",
@@ -21,6 +22,7 @@ test("CLI maps one design or reference selection into the provider contract", ()
     ),
     {
       help: false,
+      provider: "voxcpm2",
       text: "Hello there.",
       output: resolve(cwd, "sample.wav"),
       voiceId: null,
@@ -49,4 +51,16 @@ test("CLI maps one design or reference selection into the provider contract", ()
     () => parseVoxCPM2CLIArguments(["--text", "Hello.", "--output", "sample.mp3"], cwd),
     /\.wav file/,
   );
+});
+
+test("CLI defaults to German Supertonic presets and keeps cloning explicit", () => {
+  const defaults = parseVoxCPM2CLIArguments(["--text", "Grüße!", "--output", "sample.wav"]);
+  assert.equal(defaults.provider, "supertonic");
+  assert.equal(defaults.voiceId, "M1");
+  assert.equal(defaults.lang, "de");
+  for (const voice of ["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"]) {
+    assert.equal(parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--voice", voice]).voiceId, voice);
+  }
+  assert.throws(() => parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--voice", "speaker.wav"]), /M1-M5/);
+  assert.throws(() => parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--design", "Narrator"]), /requires --provider voxcpm2/);
 });

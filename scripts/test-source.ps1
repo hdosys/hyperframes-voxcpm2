@@ -42,11 +42,16 @@ try {
         -Destination (Join-Path $source 'skills\media-use\audio\scripts\lib\voxcpm2.mjs')
     Copy-Item -LiteralPath (Join-Path $root 'src\voxcpm2-cli.mjs') `
         -Destination (Join-Path $source 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs')
+    Copy-Item -LiteralPath (Join-Path $root 'src\supertonic.mjs') `
+        -Destination (Join-Path $source 'skills\media-use\audio\scripts\lib\supertonic.mjs')
+    Copy-Item -LiteralPath (Join-Path $root 'versions.json') `
+        -Destination (Join-Path $source 'skills\media-use\audio\scripts\versions.json')
     foreach ($file in @(
             (Join-Path $source 'skills\media-use\audio\scripts\audio.mjs'),
             (Join-Path $source 'skills\media-use\audio\scripts\lib\tts.mjs'),
             (Join-Path $source 'skills\media-use\audio\scripts\lib\voxcpm2.mjs'),
-            (Join-Path $source 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs')
+            (Join-Path $source 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs'),
+            (Join-Path $source 'skills\media-use\audio\scripts\lib\supertonic.mjs')
         )) {
         Invoke-CoreNative -Role "syntax check $([IO.Path]::GetFileName($file))" -FilePath 'node.exe' `
             -ProcessArguments @('--check', $file) -WorkingDirectory $source -TimeoutSeconds 30 | Out-Null
