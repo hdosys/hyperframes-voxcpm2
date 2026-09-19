@@ -1,6 +1,6 @@
 # HyperFrames VoxCPM2
 
-Local German speech for HyperFrames on Windows. Qwen3-TTS-12Hz-0.6B-CustomVoice Q8_0 is the default CPU engine, with nine built-in voices. Supertonic 3 and VoxCPM2 remain explicitly selectable. The current Qwen bundle is for local evaluation only; public release is blocked pending confirmation of the runtime fork's redistribution license.
+Local German speech for HyperFrames on Windows. Supertonic 3 with preset M1 is the default CPU engine. Qwen3-TTS-12Hz-0.6B-CustomVoice Q8_0 and VoxCPM2 remain explicitly selectable. The bundle includes Qwen for private local evaluation; public release remains blocked pending confirmation of the runtime fork's redistribution license.
 
 ## Engineering approach
 
@@ -8,33 +8,13 @@ Reuse HyperFrames' existing audio-engine seam, the Qwen runtime's existing prese
 
 ## How it works
 
-The default provider serializes requests to a bounded native Qwen process. UTF-8 text is passed through a file, preserving German characters without console-codepage conversion. Ryan is the default preset, German the direct CLI default language. Identical requests reuse a cache keyed by model/runtime identity, text, voice, language and generation settings. No voice cloning is used by Qwen CustomVoice.
+The default provider serializes requests to the official Supertonic SDK using ONNX Runtime CPU. M1 is the default preset, German the direct CLI default language. The optional Qwen provider uses a bounded native process and a UTF-8 text file, preserving German characters without console-codepage conversion. Identical requests reuse a cache keyed by model/runtime identity, text, voice, language and generation settings. No voice cloning is used by Supertonic or Qwen CustomVoice.
 
-## Qwen setup and first use
+## Supertonic setup and first use
 
-Requirements: Windows x64, Node.js 22+, PowerShell 7, and Python for the one-time model download. Synthesis needs no Python, PyTorch or GPU. Extract the local bundle, then select an empty model directory:
+Supertonic is the default, also selectable with `--provider supertonic`. Its existing path remains ONNX Runtime CPU, 16 threads, original unquantized ONNX weights, ten steps, sequential chunks of at most 300 characters and no batching. Presets remain M1-M5/F1-F5, default M1.
 
-```powershell
-python bin\download-supertonic.py --engine qwen3 --model-dir C:\Models\qwen3-customvoice-q8
-$env:HF_QWEN3_TTS_CLI = (Resolve-Path runtime\qwen3\qwen3-tts-cli.exe).Path
-$env:HF_QWEN3_TTS_MODEL_DIR = 'C:\Models\qwen3-customvoice-q8'
-.\bin\tts.ps1 --text "Dein Arbeitsbereich ist bereit." --output .\ryan.wav
-.\bin\tts.ps1 --text-file .\text.txt --voice aiden --lang de --output .\aiden.wav
-```
-
-Presets: `ryan`, `aiden`, `uncle_fu`, `dylan`, `eric`, `vivian`, `serena`, `ono_anna`, `sohee`. The English-native Ryan and Aiden presets can synthesize German, but pronunciation and voice quality remain listening decisions. This 0.6B model does not support the 1.7B model's instruction-based voice design. Playback speed is 1. CPU threads default to at most 16; `HF_QWEN3_TTS_THREADS` permits a positive count within the available logical CPUs. `HF_QWEN3_TTS_CACHE_DIR` optionally relocates the cache. Each request has a 15-minute deadline.
-
-**Model and precision:** community conversion `khimaros/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF` at `317e89450001324287f4b46e52b4807145b8c46a`, derived from the official Qwen CustomVoice checkpoint, not Base or 1.7B. The model contains 233 Q8_0, 33 FP16 and 136 FP32 tensors. The separate tokenizer/vocoder at `6895fdd9384847f4b37ea56fe385f4b7e0ee2f5f` contains 216 FP16 and 232 FP32 tensors, including encoder tensors unused for preset synthesis. This is not an all-INT8 pipeline. Model metadata, hashes and runtime identities are in `versions.json`.
-
-**Backend and licensing:** native `khimaros/qwen3-tts.cpp` with GGML, not upstream llama.cpp or ONNX. Qwen model metadata declares Apache-2.0; GGML is MIT. The pinned runtime fork contains no license grant, so the build explicitly rejects public release and includes an evaluation notice rather than inventing a runtime license. Do not redistribute its binary or the local bundle without permission.
-
-For HyperFrames, set `HF_MEDIA_ENGINE` to the extracted `engine` directory and use `--voice ryan --lang de`, or `voice` and `lang` in the audio request. The default provider is `qwen3`. Missing setup fails rather than silently switching engines.
-
-## Supertonic alternative
-
-Select `--provider supertonic`. Its existing path remains ONNX Runtime CPU, 16 threads, original unquantized ONNX weights, ten steps, sequential chunks of at most 300 characters and no batching. Presets remain M1-M5/F1-F5, default M1.
-
-This alternative requires a working Python installation and `uv` (validated with Python 3.13). Run from the bundle root, choosing an empty model directory:
+Requirements: Windows x64, Node.js 22+, PowerShell 7, a working Python installation and `uv` (validated with Python 3.13). Run from the bundle root, choosing an empty model directory:
 
 ```powershell
 uv venv .venv --python python
@@ -42,7 +22,7 @@ uv pip sync requirements.txt --python .venv\Scripts\python.exe --require-hashes 
 python bin\download-supertonic.py --model-dir C:\Models\supertonic-3
 $env:HF_SUPERTONIC_PYTHON = (Resolve-Path .venv\Scripts\python.exe).Path
 $env:HF_SUPERTONIC_MODEL_DIR = 'C:\Models\supertonic-3'
-.\bin\tts.ps1 --provider supertonic --text "Willkommen. Dein Arbeitsbereich ist bereit." --output .\welcome.wav
+.\bin\tts.ps1 --text "Willkommen. Dein Arbeitsbereich ist bereit." --output .\welcome.wav
 .\bin\tts.ps1 --provider supertonic --text "Diese Stimme wurde künstlich erzeugt." --voice F1 --lang de --output .\female.wav
 ```
 
@@ -51,6 +31,26 @@ The exact model is `supertone-oss-archive/supertonic-3` at `aafc6e32416a594460b3
 **Model terms:** Supertonic's weights and presets use OpenRAIL-M, not the source-code license. Read the downloaded `LICENSE`. Clearly disclose that generated speech is machine-generated wherever it is used or distributed, and comply with its use restrictions, including the prohibition on nonconsensual impersonation. The presets do not reuse the VoxCPM2 narrator reference.
 
 Select `--provider supertonic --voice M1 --lang de` in HyperFrames, or use `provider`, `voice` and `lang` in the audio request. `HF_SUPERTONIC_CACHE_DIR` optionally selects another audio-cache directory.
+
+## Qwen private evaluation option
+
+Python is needed only for the one-time model download. Qwen synthesis needs no Python, PyTorch or GPU. From the local bundle root, select an empty model directory:
+
+```powershell
+python bin\download-supertonic.py --engine qwen3 --model-dir C:\Models\qwen3-customvoice-q8
+$env:HF_QWEN3_TTS_CLI = (Resolve-Path runtime\qwen3\qwen3-tts-cli.exe).Path
+$env:HF_QWEN3_TTS_MODEL_DIR = 'C:\Models\qwen3-customvoice-q8'
+.\bin\tts.ps1 --provider qwen3 --text "Dein Arbeitsbereich ist bereit." --output .\ryan.wav
+.\bin\tts.ps1 --provider qwen3 --text-file .\text.txt --voice aiden --lang de --output .\aiden.wav
+```
+
+Presets: `ryan`, `aiden`, `uncle_fu`, `dylan`, `eric`, `vivian`, `serena`, `ono_anna`, `sohee`. The English-native Ryan and Aiden presets can synthesize German, but pronunciation and voice quality remain listening decisions. This 0.6B model does not support the 1.7B model's instruction-based voice design. Playback speed is 1. CPU threads default to at most 16; `HF_QWEN3_TTS_THREADS` permits a positive count within the available logical CPUs. `HF_QWEN3_TTS_CACHE_DIR` optionally relocates the cache. Each request has a 15-minute deadline.
+
+**Model and precision:** community conversion `khimaros/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF` at `317e89450001324287f4b46e52b4807145b8c46a`, derived from the official Qwen CustomVoice checkpoint, not Base or 1.7B. The model contains 233 Q8_0, 33 FP16 and 136 FP32 tensors. The separate tokenizer/vocoder at `6895fdd9384847f4b37ea56fe385f4b7e0ee2f5f` contains 216 FP16 and 232 FP32 tensors, including encoder tensors unused for preset synthesis. This is not an all-INT8 pipeline. Model metadata, hashes and runtime identities are in `versions.json`.
+
+**Backend and licensing:** native `khimaros/qwen3-tts.cpp` with GGML, not upstream llama.cpp or ONNX. Qwen model metadata declares Apache-2.0; GGML is MIT. The pinned runtime fork contains no license grant, so the build explicitly rejects public release and includes an evaluation notice rather than inventing a runtime license. Do not redistribute its binary or the local bundle without permission.
+
+For HyperFrames, set `HF_MEDIA_ENGINE` to the extracted `engine` directory and use `--provider qwen3 --voice ryan --lang de`, or set `provider`, `voice` and `lang` in the audio request. Qwen is never selected implicitly. Missing setup fails rather than silently switching engines.
 
 ## VoxCPM2 alternative
 

@@ -6,7 +6,7 @@ import { resolveSupertonicVoice, synthesizeSupertonic } from "./supertonic.mjs";
 import { resolveQwen3Voice, synthesizeQwen3 } from "./qwen3.mjs";
 
 const USAGE = `Usage:
-  tts.ps1 --text TEXT --output FILE [--voice ryan] [--lang de]
+  tts.ps1 --text TEXT --output FILE [--voice M1] [--lang de]
   tts.ps1 --text-file INPUT.txt --output FILE [--provider qwen3 | supertonic | voxcpm2]
   tts.ps1 --provider voxcpm2 --text TEXT --output FILE [--design DESCRIPTION | --voice REFERENCE.wav]
 
@@ -14,9 +14,9 @@ Options:
   --text TEXT          Text to synthesize.
   --text-file FILE     Read UTF-8 text instead of --text.
   --output FILE        Destination WAV file.
-  --provider ENGINE    qwen3 (default), supertonic or voxcpm2.
+  --provider ENGINE    supertonic (default), qwen3 or voxcpm2.
   --design DESCRIPTION VoxCPM2 Voice Design override.
-  --voice VOICE        Qwen preset (default ryan), Supertonic M1-M5/F1-F5, or VoxCPM2 WAV.
+  --voice VOICE        Supertonic M1-M5/F1-F5 (default M1), Qwen preset, or VoxCPM2 WAV.
   --lang LANGUAGE      Language code (default de; VoxCPM2 default en).
   --version            Show the bundle version.
   --help               Show this help.
@@ -55,7 +55,7 @@ export function parseVoxCPM2CLIArguments(argv, cwd = process.cwd()) {
   if (!output) throw new Error("--output is required");
   if (design && voice) throw new Error("--design and --voice are mutually exclusive");
   if (!output.toLowerCase().endsWith(".wav")) throw new Error("--output must name a .wav file");
-  const provider = values.get("--provider") ?? "qwen3";
+  const provider = values.get("--provider") ?? "supertonic";
   if (!["qwen3", "supertonic", "voxcpm2"].includes(provider)) throw new Error("--provider must be qwen3, supertonic or voxcpm2");
   if (provider !== "voxcpm2" && design) throw new Error("--design requires --provider voxcpm2");
 

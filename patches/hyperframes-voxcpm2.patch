@@ -42,7 +42,7 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
      return userProvider;
    }
 -  return heygenAvailable() ? "heygen" : elevenlabsAvailable() ? "elevenlabs" : "kokoro";
-+  return pickProvider("qwen3");
++  return pickProvider("supertonic");
  }
  
  // ── voice resolution ──────────────────────────────────────────────────────────

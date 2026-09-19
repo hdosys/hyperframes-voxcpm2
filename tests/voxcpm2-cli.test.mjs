@@ -53,14 +53,17 @@ test("CLI maps one design or reference selection into the provider contract", ()
   );
 });
 
-test("CLI defaults to German Qwen and preserves explicit Supertonic presets", () => {
+test("CLI defaults to German Supertonic M1 and keeps Qwen explicit", () => {
   const defaults = parseVoxCPM2CLIArguments(["--text", "Grüße!", "--output", "sample.wav"]);
-  assert.equal(defaults.provider, "qwen3");
-  assert.equal(defaults.voiceId, "ryan");
+  assert.equal(defaults.provider, "supertonic");
+  assert.equal(defaults.voiceId, "M1");
   assert.equal(defaults.lang, "de");
   for (const voice of ["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"]) {
     assert.equal(parseVoxCPM2CLIArguments(["--provider", "supertonic", "--text", "Hallo", "--output", "sample.wav", "--voice", voice]).voiceId, voice);
   }
-  assert.throws(() => parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--voice", "speaker.wav"]), /CustomVoice preset/);
+  const qwen = parseVoxCPM2CLIArguments(["--provider", "qwen3", "--text", "Hallo", "--output", "sample.wav"]);
+  assert.equal(qwen.provider, "qwen3");
+  assert.equal(qwen.voiceId, "ryan");
+  assert.throws(() => parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--voice", "speaker.wav"]), /M1-M5/);
   assert.throws(() => parseVoxCPM2CLIArguments(["--text", "Hallo", "--output", "sample.wav", "--design", "Narrator"]), /requires --provider voxcpm2/);
 });
