@@ -35,6 +35,8 @@ try {
             'engine/audio/scripts/lib/voxcpm2-cli.mjs', 'runtime/cpu/llama-tts-server.exe',
             'engine/audio/scripts/lib/supertonic.mjs', 'engine/audio/scripts/lib/supertonic-runner.py',
             'engine/audio/scripts/versions.json', 'versions.json', 'requirements.txt', 'bin/download-supertonic.py',
+            'engine/audio/scripts/lib/qwen3.mjs', 'runtime/qwen3/qwen3-tts-cli.exe',
+            'licenses/qwen3-tts-NOTICE.txt', 'licenses/ggml-MIT.txt',
             'reference/herdr-narrator-de.wav',
             'licenses/HyperFrames-APACHE-2.0.txt', 'licenses/llama.cpp-omni-MIT.txt'
         )) {
@@ -68,7 +70,7 @@ try {
     foreach ($sourcePatch in $sourcePatches) {
         $relative = "patches/$($sourcePatch.Name)"
         $matchingRecords = @($patchRecords | Where-Object { [string]$_.path -ceq $relative })
-        if ($matchingRecords.Count -ne 1 -or [string]$matchingRecords[0].target -notmatch '^(runtime|hyperframes)$' -or
+        if ($matchingRecords.Count -ne 1 -or [string]$matchingRecords[0].target -notmatch '^(runtime|hyperframes|qwen3)$' -or
             [string]$matchingRecords[0].sha256 -notmatch '^[0-9a-f]{64}$' -or
             [string]$matchingRecords[0].sha256 -cne (Get-FileHash -LiteralPath $sourcePatch.FullName -Algorithm SHA256).Hash.ToLowerInvariant()) {
             throw "Release manifest patch identity mismatch: $relative"
@@ -108,6 +110,10 @@ try {
     if ($help -notmatch '(?m)^  tts\.ps1 --text ' -or $help -match '(?i)voxcpm2\.ps1') {
         throw 'Release VoxCPM2 CLI help does not expose the canonical tts.ps1 command.'
     }
+    $qwenHelp = (Invoke-CoreNative -Role 'release Qwen CPU CLI' -FilePath (Join-Path $stage 'runtime\qwen3\qwen3-tts-cli.exe') -ProcessArguments @('--help') -WorkingDirectory $stage -TimeoutSeconds 30) -join "`n"
+    if ($qwenHelp -notmatch '--speaker' -or $qwenHelp -notmatch '--text-file') { throw 'Qwen CLI lacks the required preset or UTF-8 entrypoint.' }
+    $localVersion = (Invoke-CoreNative -Role 'release TTS version' -FilePath 'pwsh.exe' -ProcessArguments @('-NoProfile', '-File', (Join-Path $stage 'bin\tts.ps1'), '--version') -WorkingDirectory $stage -TimeoutSeconds 30 | Select-Object -Last 1).Trim()
+    if ($localVersion -cne [string]$manifest.releaseVersion) { throw 'TTS version does not match bundle identity.' }
 } finally {
     Remove-CoreTemporaryDirectory -Path $stage
 }

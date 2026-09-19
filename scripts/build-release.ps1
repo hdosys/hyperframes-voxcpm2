@@ -14,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Get-CoreRepositoryRoot
 $versions = Get-CoreVersions
+if (-not $Local) { throw 'Qwen runtime redistribution rights are unconfirmed. Only -Local evaluation builds are permitted; public release is blocked.' }
 if ([string]$versions.releaseVersion -cne $Version) {
     throw "versions.json declares $($versions.releaseVersion), not $Version"
 }
@@ -29,6 +30,7 @@ $runtimePatchRelative = "patches/llama.cpp-omni-$($versions.runtime.ref)-threads
 $hyperframesPatchRelative = 'patches/hyperframes-voxcpm2.patch'
 $runtimePatch = Join-Path $repositoryRoot $runtimePatchRelative.Replace('/', '\')
 $hyperframesPatch = Join-Path $repositoryRoot $hyperframesPatchRelative.Replace('/', '\')
+$qwenPatchRelative = 'patches/qwen3-tts-windows-cli.patch'
 $appliedPatches = @(
     [ordered]@{
         target = 'runtime'
@@ -39,6 +41,11 @@ $appliedPatches = @(
         target = 'hyperframes'
         path = $hyperframesPatchRelative
         sha256 = (Get-FileHash -LiteralPath $hyperframesPatch -Algorithm SHA256).Hash.ToLowerInvariant()
+    },
+    [ordered]@{
+        target = 'qwen3'
+        path = $qwenPatchRelative
+        sha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot $qwenPatchRelative) -Algorithm SHA256).Hash.ToLowerInvariant()
     }
 )
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -122,12 +129,16 @@ try {
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2.mjs')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\voxcpm2-cli.mjs') `
         -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\lib\voxcpm2-cli.mjs')
-    foreach ($name in @('supertonic.mjs', 'supertonic-runner.py')) {
+    foreach ($name in @('supertonic.mjs', 'supertonic-runner.py', 'qwen3.mjs')) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "src\$name") `
             -Destination (Join-Path $hyperframesSource "skills\media-use\audio\scripts\lib\$name")
     }
-    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'versions.json') `
-        -Destination (Join-Path $hyperframesSource 'skills\media-use\audio\scripts\versions.json')
+    $bundleVersions = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'versions.json')) | ConvertFrom-Json
+    $bundleVersions.releaseVersion = $displayVersion
+    $bundleVersionsJson = $bundleVersions | ConvertTo-Json -Depth 10
+    [IO.File]::WriteAllText((Join-Path $hyperframesSource 'skills\media-use\audio\scripts\versions.json'), $bundleVersionsJson, [Text.UTF8Encoding]::new($false))
+    $qwenStage = Join-Path $stage 'qwen'
+    & (Join-Path $PSScriptRoot 'build-qwen-runtime.ps1') -OutputDirectory $qwenStage
 
     $bundle = Join-Path $stage 'bundle'
     $engine = Join-Path $bundle 'engine'
@@ -135,16 +146,20 @@ try {
     $runtime = Join-Path $bundle 'runtime'
     $reference = Join-Path $bundle 'reference'
     $licenses = Join-Path $bundle 'licenses'
-    foreach ($directory in @($bundle, $engine, $bin, (Join-Path $runtime 'cpu'), $reference, $licenses)) {
+    foreach ($directory in @($bundle, $engine, $bin, (Join-Path $runtime 'cpu'), (Join-Path $runtime 'qwen3'), $reference, $licenses)) {
         New-Item -ItemType Directory -Path $directory -Force | Out-Null
     }
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'skills\media-use\audio') -Destination $engine -Recurse
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'src\tts.ps1') -Destination $bin
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'scripts\download-supertonic.py') -Destination $bin
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'requirements.txt') -Destination $bundle
-    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'versions.json') -Destination $bundle
+    [IO.File]::WriteAllText((Join-Path $bundle 'versions.json'), $bundleVersionsJson, [Text.UTF8Encoding]::new($false))
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'assets\herdr-narrator-de.wav') -Destination $reference
     Copy-Item -LiteralPath $cpuServer -Destination (Join-Path $runtime 'cpu\llama-tts-server.exe')
+    Copy-Item -LiteralPath (Join-Path $qwenStage 'build\Release\qwen3-tts-cli.exe') -Destination (Join-Path $runtime 'qwen3')
+    [IO.File]::WriteAllText((Join-Path $licenses 'qwen3-tts-NOTICE.txt'),
+        "Local evaluation only. The khimaros/qwen3-tts.cpp source revision $($versions.qwen3.runtime.commit) contains no license grant. Redistribution rights are unconfirmed. Do not redistribute this runtime or publish this bundle without permission. GGML and model licenses do not establish a license for the runtime fork.`n", [Text.UTF8Encoding]::new($false))
+    Copy-Item -LiteralPath (Join-Path $qwenStage 'source\ggml\LICENSE') -Destination (Join-Path $licenses 'ggml-MIT.txt')
     Copy-Item -LiteralPath (Join-Path $hyperframesSource 'LICENSE') -Destination (Join-Path $licenses 'HyperFrames-APACHE-2.0.txt')
     Copy-Item -LiteralPath (Join-Path $RuntimeSource 'LICENSE') -Destination (Join-Path $licenses 'llama.cpp-omni-MIT.txt')
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'LICENSE') -Destination (Join-Path $licenses 'hyperframes-voxcpm2-APACHE-2.0.txt')
@@ -189,6 +204,7 @@ try {
         runtime = $versions.runtime
         models = $versions.models
         supertonic = $versions.supertonic
+        qwen3 = $versions.qwen3
         referenceAudio = $versions.referenceAudio
         files = $fileRecords
     }
@@ -196,9 +212,8 @@ try {
         ($releaseManifest | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding($false)))
 
     $archiveName = if ($Local) { 'hyperframes-voxcpm2-local-windows-x64.zip' } else { "hyperframes-voxcpm2-v$Version-windows-x64.zip" }
-    $archive = Join-Path $OutputDirectory $archiveName
+    $archive = Join-Path $stage $archiveName
     $sidecar = "$archive.sha256"
-    Remove-Item -LiteralPath $archive, $sidecar -Force -ErrorAction SilentlyContinue
     Add-Type -AssemblyName System.IO.Compression
     $archiveStream = [IO.File]::Open($archive, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     try {
@@ -220,6 +235,11 @@ try {
     }
     $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText($sidecar, "$archiveHash  $archiveName`n", (New-Object Text.UTF8Encoding($false)))
+    $destinationArchive = Join-Path $OutputDirectory $archiveName
+    [IO.File]::Move($archive, $destinationArchive, $true)
+    [IO.File]::Move($sidecar, "$destinationArchive.sha256", $true)
+    $archive = $destinationArchive
+    $sidecar = "$destinationArchive.sha256"
     [pscustomobject]@{
         archive = $archive
         sha256 = $archiveHash

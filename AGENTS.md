@@ -4,8 +4,10 @@ The global OpenCode working agreement owns reusable workflow. This file owns onl
 
 - `versions.json` is the canonical owner for every upstream source, model, and tool version used by a release.
 - `src/voxcpm2.mjs` owns the local provider lifecycle, synthesis request, serialization, and audio cache behavior.
-- `src/supertonic.mjs` owns the default Supertonic provider and serialized subprocess/cache boundary. `src/supertonic-runner.py` adapts the official SDK without vendoring inference code. Supertonic uses original ONNX weights, CPU only, 16 threads, ten steps, no batching, and chunks of at most 300 characters.
-- `scripts/download-supertonic.py` admits the exact model in `versions.json` to an explicit external directory. `requirements.txt` locks the official Python SDK and CPU runtime dependencies for Python 3.13 on Windows x64.
+- `src/qwen3.mjs` owns the default Qwen CustomVoice provider and bounded native CLI/cache path. The exact Q8_0 community model uses the standalone GGML runtime, not llama.cpp. Presets only, German/Ryan defaults, CPU-only. `patches/qwen3-tts-windows-cli.patch` owns Windows memory reporting and UTF-8 text/preset CLI integration.
+- The pinned Qwen runtime fork has no confirmed redistribution license. Only local evaluation builds are allowed; the public-release builder fails closed. Do not relabel the fork MIT merely because GGML or another upstream repository is MIT.
+- `src/supertonic.mjs` owns the selectable Supertonic provider and serialized subprocess/cache boundary. `src/supertonic-runner.py` adapts the official SDK without vendoring inference code. Supertonic uses original ONNX weights, CPU only, 16 threads, ten steps, no batching, and chunks of at most 300 characters.
+- `scripts/download-supertonic.py` admits the selected Qwen or Supertonic model from `versions.json` to an explicit external directory. `requirements.txt` locks the Supertonic Python SDK and CPU runtime dependencies tested on Python 3.13 Windows x64. Qwen synthesis uses no Python dependencies.
 - `patches/` owns the smallest exact upstream integration patches. Do not fork or vendor upstream source.
 - Each release uses the current latest stable HyperFrames version and adapts the provider at its stable audio-engine seam. `versions.json` records the selected tag and commit only so that published bytes remain reproducible; never retain an older version merely to avoid a provider compatibility change.
 - `scripts/build-release.ps1` owns the Windows x64 CPU-only release bundle.

@@ -30,6 +30,33 @@
       }
     ]
   },
+  "qwen3": {
+    "repository": "khimaros/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF",
+    "revision": "317e89450001324287f4b46e52b4807145b8c46a",
+    "upstreamModel": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    "upstreamReferenceRevision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+    "runtime": {
+      "repository": "https://github.com/khimaros/qwen3-tts.cpp.git",
+      "commit": "0c8b2ba0e7c57a2741852f4305a92996258a71a0",
+      "ggmlCommit": "d4fcfe88a8bcf5c9840be14be6c2fbf1f5b3b2db"
+    },
+    "runtimeLicenseStatus": "No license grant in pinned fork; local evaluation only, redistribution and public release blocked.",
+    "precision": "Talker/code predictor: 233 Q8_0, 33 F16, 136 F32 tensors. Vocoder file: 216 F16 and 232 F32 tensors (includes unused encoder). Not all-INT8 and not llama.cpp.",
+    "files": [
+      {
+        "name": "Qwen3-TTS-12Hz-0.6B-CustomVoice-Q8_0.gguf",
+        "size": 1325190880,
+        "sha256": "6dc55956938958572a6a3c23c549c69da19a100650dbda7865f5457850080fca",
+        "url": "https://huggingface.co/khimaros/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF/resolve/317e89450001324287f4b46e52b4807145b8c46a/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q8_0.gguf"
+      },
+      {
+        "name": "Qwen3-TTS-Tokenizer-12Hz-F16.gguf",
+        "size": 341157120,
+        "sha256": "f553f984c8c82ef1881f4fdb6ff0f68c02f3ac710fd971b63d044cf6ab1c5fd2",
+        "url": "https://huggingface.co/khimaros/Qwen3-TTS-Tokenizer-12Hz-GGUF/resolve/6895fdd9384847f4b37ea56fe385f4b7e0ee2f5f/Qwen3-TTS-Tokenizer-12Hz-F16.gguf"
+      }
+    ]
+  },
   "supertonic": {
     "repository": "supertone-oss-archive/supertonic-3",
     "revision": "aafc6e32416a594460b32413efc49d7fe4ce6d46",

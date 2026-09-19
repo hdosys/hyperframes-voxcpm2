@@ -1,0 +1,92 @@
+diff --git a/src/qwen3_tts.cpp b/src/qwen3_tts.cpp
+--- a/src/qwen3_tts.cpp
++++ b/src/qwen3_tts.cpp
+@@ -14,6 +14,11 @@
+ 
+ #ifdef __APPLE__
+ #include <mach/mach.h>
++#elif defined(_WIN32)
++#define NOMINMAX
++#include <windows.h>
++#include <psapi.h>
++#pragma comment(lib, "psapi.lib")
+ #else
+ #include <sys/resource.h>
+ #endif
+@@ -62,6 +67,13 @@ static bool get_process_memory_snapshot(process_memory_snapshot & out) {
+     }
+     return true;
++#elif defined(_WIN32)
++    PROCESS_MEMORY_COUNTERS counters = {};
++    counters.cb = sizeof(counters);
++    if (!GetProcessMemoryInfo(GetCurrentProcess(), &counters, sizeof(counters))) return false;
++    out.rss_bytes = counters.WorkingSetSize;
++    out.phys_footprint_bytes = counters.PeakWorkingSetSize;
++    return true;
+ #else
+     struct rusage usage = {};
+     if (getrusage(RUSAGE_SELF, &usage) != 0) {
+diff --git a/src/main.cpp b/src/main.cpp
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -4,6 +4,8 @@
+ #include <cstring>
+ #include <filesystem>
+ #include <string>
++#include <fstream>
++#include <iterator>
+ 
+ void print_usage(const char * program) {
+     fprintf(stderr, "Usage: %s [options] -m <model_dir> -t <text>\n", program);
+@@ -12,6 +14,8 @@ void print_usage(const char * program) {
+     fprintf(stderr, "  -m, --model <path>     Talker gguf file, or directory containing talker+tokenizer ggufs (required)\n");
+     fprintf(stderr, "      --vocoder <file>   Tokenizer/vocoder gguf (required when -m is a file; else auto-discovered)\n");
+     fprintf(stderr, "  -t, --text <text>      Text to synthesize (required)\n");
++    fprintf(stderr, "      --text-file <file> Read UTF-8 text without console encoding conversion\n");
++    fprintf(stderr, "      --speaker <name>  Built-in CustomVoice preset (no cloning)\n");
+     fprintf(stderr, "  -o, --output <file>    Output file; .wav, or .mp3/.opus if built with libav (default: output.wav)\n");
+     fprintf(stderr, "  -r, --reference <file> Reference audio for voice cloning\n");
+     fprintf(stderr, "  --temperature <val>    Sampling temperature (default: 0.9, 0=greedy)\n");
+@@ -35,6 +39,7 @@ int main(int argc, char ** argv) {
+     std::string vocoder_path;
+     std::string text;
+     std::string output_file = "output.wav";
++    std::string speaker;
+     std::string reference_audio;
+     int32_t streaming_batch_size = 0;
+ 
+@@ -56,6 +61,17 @@ int main(int argc, char ** argv) {
+         } else if (arg == "--vocoder") {
+             if (++i >= argc) { fprintf(stderr, "Error: missing vocoder path\n"); return 1; }
+             vocoder_path = argv[i];
++        } else if (arg == "--speaker") {
++            if (++i >= argc) { fprintf(stderr, "Error: missing speaker\n"); return 1; }
++            speaker = argv[i];
++        } else if (arg == "--text-file") {
++            if (++i >= argc) { fprintf(stderr, "Error: missing text file\n"); return 1; }
++            std::ifstream input(argv[i], std::ios::binary);
++            if (!input) { fprintf(stderr, "Error: cannot read UTF-8 text file\n"); return 1; }
++            text.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
++            if (text.compare(0, 3, "\xEF\xBB\xBF") == 0) text.erase(0, 3);
+         } else if (arg == "-t" || arg == "--text") {
+             if (++i >= argc) {
+                 fprintf(stderr, "Error: missing text\n");
+@@ -212,7 +228,18 @@ int main(int argc, char ** argv) {
+     }
+ 
+-    if (reference_audio.empty()) {
++    if (!speaker.empty()) {
++        if (!reference_audio.empty() || tts.get_model_type() != "custom_voice") {
++            fprintf(stderr, "Error: --speaker requires CustomVoice and no reference audio\n");
++            return 1;
++        }
++        std::vector<float> embedding;
++        if (!tts.get_speaker_embedding(speaker, embedding)) {
++            fprintf(stderr, "Error: %s\n", tts.get_error().c_str());
++            return 1;
++        }
++        result = tts.synthesize_with_embedding(text, embedding.data(), (int32_t)embedding.size(), params);
++    } else if (reference_audio.empty()) {
+         fprintf(stderr, "Synthesizing: \"%s\"\n", text.c_str());
+         if (streaming_batch_size > 0) {
+             result = tts.synthesize(text, params, &stream_opts);

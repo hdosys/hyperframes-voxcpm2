@@ -1,7 +1,7 @@
 diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio/scripts/lib/tts.mjs
 --- a/skills/media-use/audio/scripts/lib/tts.mjs
 +++ b/skills/media-use/audio/scripts/lib/tts.mjs
-@@ -19,6 +19,15 @@ import { tmpdir } from "node:os";
+@@ -19,6 +19,16 @@ import { tmpdir } from "node:os";
  import { dirname, join } from "node:path";
  import { heygenAuthHeaders, heygenCredential, heygenJSON } from "./heygen.mjs";
  import { pythonInvocation } from "./python.mjs";
@@ -12,19 +12,22 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
 +  voxcpm2Available,
 +} from "./voxcpm2.mjs";
 +import { resolveSupertonicVoice, supertonicAvailable, synthesizeSupertonic } from "./supertonic.mjs";
++import { resolveQwen3Voice, qwen3Available, synthesizeQwen3 } from "./qwen3.mjs";
 +
 +export { shutdownVoxCPM2Server };
  
  // ── provider detection ────────────────────────────────────────────────────────
  export function heygenAvailable() {
-@@ -36,8 +45,14 @@ export function elevenlabsAvailable() {
+@@ -36,8 +46,16 @@ export function elevenlabsAvailable() {
  // First available provider wins; an explicit choice is honored (and validated).
  export function pickProvider(userProvider) {
    if (userProvider) {
 -    if (!["heygen", "elevenlabs", "kokoro"].includes(userProvider))
 -      throw new Error(`invalid provider "${userProvider}" (heygen | elevenlabs | kokoro)`);
-+    if (!["supertonic", "voxcpm2", "heygen", "elevenlabs", "kokoro"].includes(userProvider))
-+      throw new Error(`invalid provider "${userProvider}" (supertonic | voxcpm2 | heygen | elevenlabs | kokoro)`);
++    if (!["qwen3", "supertonic", "voxcpm2", "heygen", "elevenlabs", "kokoro"].includes(userProvider))
++      throw new Error(`invalid provider "${userProvider}" (qwen3 | supertonic | voxcpm2 | heygen | elevenlabs | kokoro)`);
++    if (userProvider === "qwen3" && !qwen3Available())
++      throw new Error("provider=qwen3 requires HF_QWEN3_TTS_CLI and HF_QWEN3_TTS_MODEL_DIR");
 +    if (userProvider === "supertonic" && !supertonicAvailable())
 +      throw new Error("provider=supertonic requires HF_SUPERTONIC_PYTHON and HF_SUPERTONIC_MODEL_DIR");
 +    if (userProvider === "voxcpm2" && !voxcpm2Available())
@@ -34,25 +37,26 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
      if (userProvider === "heygen" && !heygenAvailable())
        throw new Error(
          "provider=heygen but no HeyGen credentials (set $HEYGEN_API_KEY or run `npx hyperframes auth login`)",
-@@ -46,7 +61,7 @@ export function pickProvider(userProvider) {
+@@ -46,7 +64,7 @@ export function pickProvider(userProvider) {
        throw new Error("provider=elevenlabs but $ELEVENLABS_API_KEY is not set");
      return userProvider;
    }
 -  return heygenAvailable() ? "heygen" : elevenlabsAvailable() ? "elevenlabs" : "kokoro";
-+  return pickProvider("supertonic");
++  return pickProvider("qwen3");
  }
  
  // ── voice resolution ──────────────────────────────────────────────────────────
-@@ -54,6 +69,8 @@ export function pickProvider(userProvider) {
+@@ -54,6 +72,9 @@ export function pickProvider(userProvider) {
  // English public starfish voice when none is pinned. ElevenLabs/Kokoro have
  // their own defaults.
  export async function resolveVoiceId({ provider, userVoice, lang = "en" }) {
 +  if (provider === "voxcpm2") return resolveVoxCPM2Reference(userVoice);
 +  if (provider === "supertonic") return resolveSupertonicVoice(userVoice);
++  if (provider === "qwen3") return resolveQwen3Voice(userVoice);
    if (userVoice) return userVoice;
    if (provider === "elevenlabs") return "21m00Tcm4TlvDq8ikWAM"; // Rachel
    if (provider === "kokoro") {
-@@ -245,10 +262,17 @@ export async function synthesizeOne({
+@@ -245,10 +266,20 @@ export async function synthesizeOne({
    provider,
    text,
    voiceId,
@@ -67,6 +71,9 @@ diff --git a/skills/media-use/audio/scripts/lib/tts.mjs b/skills/media-use/audio
 +  }
 +  if (provider === "supertonic") {
 +    return synthesizeSupertonic({ text, voiceId, voiceDesign, lang, speed, wavAbs, hyperframesDir });
++  }
++  if (provider === "qwen3") {
++    return synthesizeQwen3({ text, voiceId, voiceDesign, lang, speed, wavAbs, hyperframesDir });
 +  }
    if (provider === "heygen") return synthesizeHeygen({ text, voiceId, lang, speed, wavAbs });
    if (provider === "elevenlabs") {

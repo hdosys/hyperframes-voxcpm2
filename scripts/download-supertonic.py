@@ -1,4 +1,4 @@
-"""Admit the exact official model once to an explicitly selected directory."""
+"""Admit a pinned TTS model once to an explicitly selected directory."""
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -11,9 +11,10 @@ import urllib.request
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-dir", required=True, type=Path)
+    parser.add_argument("--engine", choices=("supertonic", "qwen3"), default="supertonic")
     parser.add_argument("--versions", type=Path, default=Path(__file__).resolve().parents[1] / "versions.json")
     args = parser.parse_args()
-    model = json.loads(args.versions.read_text(encoding="utf-8"))["supertonic"]
+    model = json.loads(args.versions.read_text(encoding="utf-8"))[args.engine]
     identity = {key: model[key] for key in ("repository", "revision", "files")}
     directory = args.model_dir.resolve()
     marker = directory / "admitted.json"
@@ -34,7 +35,7 @@ def main():
         digest = hashlib.sha256() if "sha256" in item else hashlib.sha1()
         if "gitBlob" in item:
             digest.update(f"blob {item['size']}\0".encode())
-        url = f"https://huggingface.co/{model['repository']}/resolve/{model['revision']}/{item['name']}"
+        url = item.get("url") or f"https://huggingface.co/{model['repository']}/resolve/{model['revision']}/{item['name']}"
         size = 0
         with urllib.request.urlopen(url, timeout=60) as response, path.open("xb") as output:
             while data := response.read(1024 * 1024):
