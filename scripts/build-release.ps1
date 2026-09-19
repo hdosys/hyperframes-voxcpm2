@@ -90,7 +90,7 @@ try {
 
     $cmake = (Get-Command 'cmake.exe' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
     $common = @(
-        '-G', 'Visual Studio 17 2022', '-A', 'x64', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
+        '-A', 'x64', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_STATIC=ON',
         '-DGGML_NATIVE=OFF', '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF',
         '-DLLAMA_BUILD_APP=OFF', '-DLLAMA_BUILD_UI=OFF', '-DLLAMA_BUILD_TOOLS=ON',
         '-DLLAMA_BUILD_SERVER=ON', '-DLLAMA_TOOLS_INSTALL=OFF', '-DLLAMA_OPENSSL=OFF'

@@ -93,7 +93,7 @@ Requirements:
 - Windows x64
 - Node.js 22 or newer
 - PowerShell 7
-- Visual Studio 2022 Build Tools
+- Current stable Visual Studio Build Tools with the C++ workload
 - CMake
 
 Run source tests:
